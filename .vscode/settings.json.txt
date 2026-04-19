@@ -1,0 +1,3 @@
+{
+  "python.envFile": "$C:/Projects/Football Rankings Model/.env"
+}
