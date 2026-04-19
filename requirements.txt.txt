@@ -1,0 +1,54 @@
+# =========================
+# Core numerical / data
+# =========================
+numpy
+pandas
+polars
+
+# =========================
+# Visualisation
+# =========================
+matplotlib
+seaborn
+plotly
+
+# =========================
+# Statistics / modelling
+# =========================
+scikit-learn
+statsmodels
+scipy
+
+# =========================
+# Network / graph (KEY for you)
+# =========================
+networkx
+
+# =========================
+# Data / SQL
+# =========================
+duckdb
+
+# =========================
+# App / storytelling
+# =========================
+streamlit
+
+# =========================
+# Data ingestion / APIs
+# =========================
+requests
+httpx
+beautifulsoup4
+
+# =========================
+# Utilities
+# =========================
+tqdm
+pyyaml
+
+# =========================
+# Dev / notebooks
+# =========================
+jupyter
+ipykernel
