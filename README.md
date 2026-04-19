@@ -17,32 +17,29 @@ The project uses a star schema data model:
 ### `scripts/create_data_model.py`
 Processes raw CSV football data files and creates the data model.
 
-### `scripts/run_glicko_country.py <country_name>`
-Runs Glicko-2 ratings for a specific country.
+### `scripts/optimize_glicko_match_only.py`
+Optimizes Glicko-2 parameters based purely on match prediction accuracy (log loss, brier score, accuracy), without ranking comparisons.
 
 **Usage:**
 ```bash
-# Create data model (run once)
-python scripts/create_data_model.py
+# Optimize parameters using config file
+python scripts/optimize_glicko_match_only.py --config config/config.example.json
 
-# Run ratings for a country
-python scripts/run_glicko_country.py scotland
-python scripts/run_glicko_country.py england
-python scripts/run_glicko_country.py germany
+# Optimize for specific country using processed data
+python scripts/optimize_glicko_match_only.py \
+  --fact-result-simple output/fact_result_simple.csv \
+  --country scotland \
+  --rankings-file output/scotland/scotland_teams.csv \
+  --output-dir output/scotland
 ```
 
-**Output Structure:**
-```
-output/
-├── dim_*.csv                    # Data model dimensions
-├── fact_result*.csv            # Data model facts
-└── {country_name}/              # Country-specific results
-    ├── config.json             # Glicko configuration
-    ├── {country}_matches.csv   # Processed matches
-    ├── {country}_teams.csv     # Team information
-    ├── {country}_ratings.csv   # Final Glicko ratings
-    └── {country}_predictions.csv # Match predictions
-```
+**Output:**
+- `parameter_search_results.csv`: All parameter combinations tested
+- `best_params.json`: Optimal parameters found
+- `optimiser.json`: Optimization summary
+
+### `scripts/optimize_glicko_params.py`
+Optimizes Glicko-2 parameters comparing against external rankings (WAGR) for validation.
 
 ## Glicko-2 Parameters
 

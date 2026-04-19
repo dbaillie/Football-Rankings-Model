@@ -3,7 +3,6 @@ Glicko-2 Engine Library
 =======================
 Shared Glicko-2 rating engine, helper functions, and evaluation metrics
 used across the WAGR Algorithm notebooks.
-
 """
 
 import math
@@ -329,14 +328,14 @@ def run_glicko2(
         If None and seed_from_wagr=True, uses rank_to_initial_rating defaults.
     reseed_after_weeks : int
         If a player returns after >= this many weeks of inactivity,
-        fully reset them as a new player.  Set to 0 to disable.
+        fully reset them as a new player. Set to 0 to disable.
     sof_pos_sigma : float
         Gaussian sigma for positional weighting in SoF.
-        w(rank) = exp(-rank^2 / (2*sigma^2)).  Set 0 to disable.
+        w(rank) = exp(-rank^2 / (2*sigma^2)). Set 0 to disable.
     sof_norm_top_n : int
         Number of top-rated players used as the reference field for SoF
-        normalisation.  The weighted sum of this reference field is scaled
-        to ``sof_norm_target``.  Set to 0 to disable normalisation.
+        normalisation. The weighted sum of this reference field is scaled
+        to ``sof_norm_target``. Set to 0 to disable normalisation.
     sof_norm_target : float
         Target value for the reference field's normalised SoF (default 1000).
 
@@ -349,7 +348,6 @@ def run_glicko2(
     if rank_to_rating_fn is None:
         rank_to_rating_fn = rank_to_initial_rating
 
-    # pre-compute whether gates are active
     gate_active = (upset_gate_max > 0 and upset_gate_k > 0)
     info_gate_active = (info_gate_scale > 0)
     decay_active = (inactivity_decay_pts > 0)
@@ -357,11 +355,7 @@ def run_glicko2(
     reseed_active = (reseed_after_weeks > 0)
     sof_norm_active = (sof_norm_top_n > 0 and sof_norm_target > 0)
 
-    # Gaussian positional weight: w(rank) = exp(-rank^2 / (2*sigma^2))
     sof_sigma_sq2 = 2.0 * sof_pos_sigma * sof_pos_sigma if sof_pos_sigma > 0 else 1.0
-
-    # reverse lookup: pid -> wagr rank (for diagnostics)
-    wagr_rank_rev = {v: k for k, v in wagr_rank_map.items()} if wagr_rank_map else {}
 
     if initial_state is None:
         state = {}
@@ -376,7 +370,6 @@ def run_glicko2(
             for pid, v in initial_state.items()
         }
 
-    # ---- Pre-build event -> week -> set of player IDs ----
     events_by_week = defaultdict(lambda: defaultdict(set))
     for _, row in matches_pdf.iterrows():
         wk = int(row["week"])
@@ -421,7 +414,7 @@ def run_glicko2(
                     "last_week_seen": int(week)
                 }
 
-        # 1b) Re-seed players returning after long absence.
+        # 1b) Re-seed players returning after long absence
         if reseed_active:
             for pid in players_this_week:
                 gap = weeks_between(state[pid]["last_week_seen"], week)
@@ -444,7 +437,7 @@ def run_glicko2(
                 phi_pre = math.sqrt(phi * phi + sigma * sigma * gap + inactivity_drift * inactivity_drift * gap)
                 state[pid]["phi"] = phi_pre
 
-        # 2b) Apply weekly decay to ALL inactive players beyond grace period.
+        # 2b) Apply weekly decay to all inactive players beyond grace period
         if decay_active and weeks_elapsed > 0:
             for pid in state:
                 if pid in players_this_week:
@@ -455,8 +448,7 @@ def run_glicko2(
                 if decay_weeks > 0:
                     state[pid]["mu"] -= decay_mu_per_week * decay_weeks
 
-        # 2c) Strength of Field — computed BEFORE rating updates
-        #     Normalisation: scale so the global top-N weighted sum = target
+        # 2c) Strength of Field — computed before rating updates
         sof_factor = 1.0
         if sof_norm_active:
             all_rd_contribs = []
@@ -465,17 +457,21 @@ def run_glicko2(
                 phi_p = state[pid]["phi"]
                 w_rd = min(1.0, ref_phi / max(phi_p, 1e-12))
                 all_rd_contribs.append(r * w_rd)
+
             all_rd_contribs.sort(reverse=True)
             sof_ref_top = all_rd_contribs[:sof_norm_top_n]
+
             sof_ref_sum = 0.0
             for rank_idx, contrib in enumerate(sof_ref_top):
                 w_pos = math.exp(-(rank_idx * rank_idx) / sof_sigma_sq2) if sof_pos_sigma > 0 else 1.0
                 sof_ref_sum += contrib * w_pos
+
             sof_factor = sof_norm_target / sof_ref_sum if sof_ref_sum > 0 else 1.0
 
         for eid, event_pids in events_by_week[week].items():
             ratings = []
             player_rd_contrib = []
+
             for pid in event_pids:
                 if pid in state:
                     r = mu_to_rating(state[pid]["mu"], init_rating)
@@ -535,12 +531,25 @@ def run_glicko2(
         # Snapshot pre-update ratings for diagnostics
         if diag_every > 0:
             pre_mu = {pid: state[pid]["mu"] for pid in games_by_player}
+        else:
+            pre_mu = {}
 
-        # 5) Update each active player using Glicko-2
+        # 5) Freeze weekly state so all updates use the same rating-period inputs
+        pre_state = {
+            int(pid): {
+                "mu": float(v["mu"]),
+                "phi": float(v["phi"]),
+                "sigma": float(v["sigma"]),
+                "last_week_seen": int(v["last_week_seen"]),
+            }
+            for pid, v in state.items()
+        }
+
+        # 6) Update each active player using frozen pre_state
         for pid, games in games_by_player.items():
-            mu = state[pid]["mu"]
-            phi = state[pid]["phi"]
-            sigma = state[pid]["sigma"]
+            mu = pre_state[pid]["mu"]
+            phi = pre_state[pid]["phi"]
+            sigma = pre_state[pid]["sigma"]
 
             n_games = len(games)
             if n_games == 0:
@@ -551,8 +560,8 @@ def run_glicko2(
             delta_sum = 0.0
 
             for opp, score in games:
-                mu_j = state[opp]["mu"]
-                phi_j = state[opp]["phi"]
+                mu_j = pre_state[opp]["mu"]
+                phi_j = pre_state[opp]["phi"]
 
                 g_j = g(phi_j)
                 e_j = E(mu, mu_j, phi_j)
@@ -587,7 +596,6 @@ def run_glicko2(
 
                 delta_sum += contribution
 
-            # --- Volume scaling ---
             if n_games > 1:
                 vol_scale = math.sqrt(n_games)
                 v_inv /= vol_scale
@@ -611,7 +619,7 @@ def run_glicko2(
             state[pid]["sigma"] = sigma_new
             state[pid]["last_week_seen"] = week
 
-        # --- Diagnostics ---
+        # Diagnostics
         is_last = (week_idx == n_weeks - 1)
         if diag_every > 0 and (week_idx % diag_every == 0 or is_last):
             top_pid = max(state, key=lambda p: state[p]["mu"])
@@ -643,7 +651,7 @@ def run_glicko2(
                 line += f"  drop: pid={best_drop_pid} {best_drop:.1f}"
             print(line)
 
-        # 6) Snapshot if requested
+        # 7) Snapshot if requested
         if snapshot_weeks is not None and week in snapshot_weeks:
             week_snapshots[week] = {
                 int(pid): {

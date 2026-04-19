@@ -49,6 +49,28 @@ That script writes:
 
 It also updates the `run` block inside `config.json` so the run script uses the newly estimated parameters.
 
+### Library-based optimisation
+
+A newer wrapper is available that uses the `libs/glicko_engine` parameter-optimisation helpers directly:
+
+```bash
+python scripts/optimize_glicko_params.py --config config.json
+```
+
+Additional options:
+- `--output-dir <dir>` to override where result files are saved
+- `--save-config` to write the best parameters back into the input config
+- `--fact-result-simple <path>` to convert `fact_result_simple.csv` into Glicko matches directly
+- `--country <name>` to filter the fact_result_simple file by country
+- `--rankings-file <path>` to provide a country-specific rankings file
+
+If you use `--fact-result-simple`, you must also provide `--rankings-file`.
+
+This script saves:
+- `parameter_search_results.csv`
+- `best_params.json`
+- `optimiser.json`
+
 4. Run the model:
 
 ```bash
