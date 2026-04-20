@@ -22,7 +22,7 @@ import sys
 # Import the Glicko engine
 sys.path.append('libs')
 from glicko_engine.core import run_glicko2
-from glicko_engine.outputs import state_to_ratings_df
+from glicko_engine.outputs import state_to_ratings_df, snapshots_to_df
 
 
 def load_country_data(country_name: str):
@@ -203,7 +203,7 @@ def main():
             inactivity_decay_grace=12,
             reseed_after_weeks=52,
             seed_from_wagr=False,
-            snapshot_weeks=weeks[-10:] if len(weeks) > 10 else weeks,  # Last 10 weeks
+            snapshot_weeks=weeks,  # Capture every week for movement charts
             diag_every=10
         )
 
@@ -220,9 +220,17 @@ def main():
         id_to_team = {tid: name for tid, name in zip(teams_df['team_id'], teams_df['team_name'])}
         final_ratings['team_name'] = final_ratings['pid'].map(id_to_team)
 
+        # Create weekly rating snapshots and compute movement per team
+        weekly_ratings = snapshots_to_df(week_snapshots, init_rating_centre=1500.0)
+        weekly_ratings['team_name'] = weekly_ratings['pid'].map(id_to_team)
+        weekly_ratings = weekly_ratings.sort_values(['team_name', 'week']).reset_index(drop=True)
+        weekly_ratings['rating_change'] = weekly_ratings.groupby('pid')['rating'].diff().fillna(0.0)
+        weekly_ratings['rating_change_pct'] = weekly_ratings.groupby('pid')['rating'].pct_change().fillna(0.0)
+
         # Save results
         final_ratings.to_csv(output_dir / f"{country_name}_ratings.csv", index=False)
         pred_df.to_csv(output_dir / f"{country_name}_predictions.csv", index=False)
+        weekly_ratings.to_csv(output_dir / f"{country_name}_weekly_ratings.csv", index=False)
 
         print("\nTop 10 teams by rating:")
         top_10 = final_ratings.sort_values('rating', ascending=False).head(10)
