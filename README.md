@@ -12,6 +12,20 @@ The project uses a star schema data model:
 - `fact_result_simple.csv`: Match results (simplified)
 - `fact_result.csv`: Match results (full details)
 
+## Canonical Europe pipeline
+
+The repository now uses one club-identity flow:
+
+1. `python scripts/create_data_model.py`
+2. `python scripts/ingest_leagues_from_config.py` (optional enrichment)
+3. `python scripts/resolve_club_identities.py --write`
+4. `python scripts/run_glicko_europe.py`
+
+Notes:
+- `scripts/resolve_club_identities.py` is the single source of truth for club ID remapping + duplicate fixture dedupe.
+- `scripts/european_results.py` has been removed as a legacy matching path.
+- `scripts/run_glicko_europe.py` expects `output/fact_result_simple_resolved.csv`.
+
 ## Scripts
 
 ### `scripts/create_data_model.py`

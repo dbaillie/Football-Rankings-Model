@@ -4,7 +4,6 @@
 numpy
 pandas
 polars
-
 # =========================
 # Visualisation
 # =========================
@@ -33,6 +32,8 @@ duckdb
 # App / storytelling
 # =========================
 streamlit
+fastapi
+uvicorn
 
 # =========================
 # Data ingestion / APIs
