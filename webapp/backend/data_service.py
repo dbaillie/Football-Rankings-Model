@@ -4,6 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 
@@ -104,6 +105,13 @@ def load_match_results() -> pd.DataFrame:
     return matches
 
 
+def warm_csv_caches() -> None:
+    """Eager-load heavy CSV frames so the first `/api/club/...` call does not block for minutes."""
+    load_teams()
+    load_weekly_ratings()
+    load_match_results()
+
+
 def list_countries() -> list[str]:
     countries = sorted(load_teams()["country_name"].dropna().str.lower().unique().tolist())
     return countries
@@ -143,6 +151,121 @@ def get_country_timeseries(country: str) -> list[dict[str, Any]]:
         .sort_values("week")
     )
     return aggregated.to_dict(orient="records")
+
+
+def get_team_club_detail(team_id: int, weekly_limit: int = 15) -> dict[str, Any] | None:
+    """Full club view: every match (team-centric rows) plus largest weekly rating gains and losses."""
+    tid = int(team_id)
+    teams_df = load_teams()
+    meta = teams_df.loc[teams_df["pid"].astype(int) == tid]
+    if meta.empty:
+        return None
+
+    team_name = str(meta.iloc[0]["team_name"])
+    country_name = str(meta.iloc[0]["country_name"])
+
+    matches_df = load_match_results()
+    hid = matches_df["home_team_id"].astype(int)
+    aid = matches_df["away_team_id"].astype(int)
+    sub = matches_df[(hid == tid) | (aid == tid)].copy()
+    sub = sub.sort_values("match_date", ascending=False)
+
+    home_side = sub["home_team_id"].astype(int).to_numpy() == tid
+    md = pd.to_datetime(sub["match_date"], errors="coerce")
+    match_dates = np.where(md.notna(), md.dt.strftime("%Y-%m-%d"), None)
+
+    opp_id = np.where(home_side, sub["away_team_id"].to_numpy(), sub["home_team_id"].to_numpy())
+    opp_name = np.where(
+        home_side,
+        sub["away_team_name"].astype(str).to_numpy(),
+        sub["home_team_name"].astype(str).to_numpy(),
+    )
+    team_goals = np.where(home_side, sub["home_goals"].to_numpy(), sub["away_goals"].to_numpy())
+    opp_goals = np.where(home_side, sub["away_goals"].to_numpy(), sub["home_goals"].to_numpy())
+    rating_delta = np.where(
+        home_side,
+        sub["home_rating_change"].to_numpy(dtype=float),
+        sub["away_rating_change"].to_numpy(dtype=float),
+    )
+    pre_r = np.where(
+        home_side,
+        sub["home_pre_rating"].to_numpy(dtype=float),
+        sub["away_pre_rating"].to_numpy(dtype=float),
+    )
+    post_r = np.where(
+        home_side,
+        sub["home_post_rating"].to_numpy(dtype=float),
+        sub["away_post_rating"].to_numpy(dtype=float),
+    )
+
+    venue = np.where(home_side, "H", "A")
+    stacked = np.column_stack(
+        [
+            match_dates,
+            sub["week"].to_numpy(),
+            sub["competition"].astype(str).to_numpy(),
+            venue,
+            opp_id,
+            opp_name,
+            team_goals,
+            opp_goals,
+            rating_delta,
+            pre_r,
+            post_r,
+        ]
+    )
+    cols = [
+        "match_date",
+        "week",
+        "competition",
+        "venue",
+        "opponent_id",
+        "opponent_name",
+        "team_goals",
+        "opponent_goals",
+        "rating_change",
+        "pre_rating",
+        "post_rating",
+    ]
+    match_rows = [
+        {
+            "match_date": row[0],
+            "week": int(row[1]),
+            "competition": str(row[2]),
+            "venue": str(row[3]),
+            "opponent_id": int(row[4]),
+            "opponent_name": str(row[5]),
+            "team_goals": int(row[6]),
+            "opponent_goals": int(row[7]),
+            "rating_change": float(row[8]),
+            "pre_rating": float(row[9]),
+            "post_rating": float(row[10]),
+        }
+        for row in stacked
+    ]
+
+    weekly = load_weekly_ratings()
+    tw = weekly[weekly["pid"].astype(int) == tid].copy()
+    weekly_cols = ["week", "week_date", "rating", "rating_change", "rating_change_pct"]
+
+    if tw.empty:
+        weekly_gains: list[dict[str, Any]] = []
+        weekly_losses: list[dict[str, Any]] = []
+    else:
+        tw = tw.sort_values("week")
+        gains_df = tw.nlargest(weekly_limit, "rating_change")[weekly_cols]
+        losses_df = tw.nsmallest(weekly_limit, "rating_change")[weekly_cols]
+        weekly_gains = gains_df.to_dict(orient="records")
+        weekly_losses = losses_df.to_dict(orient="records")
+
+    return {
+        "team_id": tid,
+        "team_name": team_name,
+        "country_name": country_name,
+        "matches": match_rows,
+        "weekly_gains": weekly_gains,
+        "weekly_losses": weekly_losses,
+    }
 
 
 def get_team_biggest_matches(team_id: int, limit: int = 10) -> dict[str, list[dict[str, Any]]]:
@@ -246,3 +369,7 @@ def get_country_summaries() -> list[dict[str, Any]]:
 def clear_data_caches() -> None:
     """Clear in-memory CSV caches so next request reloads files from disk."""
     _csv_cache.clear()
+    load_teams.cache_clear()
+    load_weekly_ratings.cache_clear()
+    load_final_ratings.cache_clear()
+    load_match_results.cache_clear()

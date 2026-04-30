@@ -40,10 +40,16 @@ From the repository root:
 
 ```bash
 pip install -r requirements.txt
-python -m uvicorn webapp.backend.main:app --reload
+python run_server.py
 ```
 
+(or `python -m uvicorn webapp.backend.main:app --reload` — must be that module, not another `main:app`).
+
+Wait until the terminal prints **`CSV preload complete`** (first boot can take 1–2 minutes while match results load). If you reload code often and want an instant listening socket, set `FOOTBALL_RANKINGS_SKIP_PRELOAD=1` (first club request may then hang while CSVs load).
+
 Then open [http://127.0.0.1:8000](http://127.0.0.1:8000).
+
+After pulling changes that add API routes, **stop uvicorn completely** (Ctrl+C so both reloader and worker exit) and start it again. If `--reload` misses a change, club endpoints can 404 while older routes still work—check [http://127.0.0.1:8000/openapi.json](http://127.0.0.1:8000/openapi.json) for **`/api/club/{team_id}`**.
 
 ## API endpoints
 
@@ -55,3 +61,5 @@ Then open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 - `GET /api/country/{country}/timeseries`
 - `GET /api/team/{team_id}/timeseries`
 - `GET /api/team/{team_id}/biggest-matches?limit=12`
+- `GET /api/club/{team_id}` — **canonical** club payload (all matches + weekly rating gains/losses)
+- `GET /api/team/{team_id}/club-detail` — same payload (back-compat alias)
