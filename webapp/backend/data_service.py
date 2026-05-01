@@ -33,6 +33,16 @@ class _MtimeCsvCache:
 _csv_cache = _MtimeCsvCache()
 
 
+def _strip_international(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop synthetic UEFA aggregate rows (country International / * International names)."""
+    if df.empty or "country_name" not in df.columns:
+        return df
+    bad = df["country_name"].str.lower().eq("international")
+    if "team_name" in df.columns:
+        bad = bad | df["team_name"].str.endswith(" International", na=False)
+    return df[~bad]
+
+
 def week_to_date(week_value: int) -> pd.Timestamp | None:
     """Convert YYYYWW week integer into an ISO date (week start)."""
     if pd.isna(week_value):
@@ -113,12 +123,13 @@ def warm_csv_caches() -> None:
 
 
 def list_countries() -> list[str]:
-    countries = sorted(load_teams()["country_name"].dropna().str.lower().unique().tolist())
+    teams = _strip_international(load_teams())
+    countries = sorted(teams["country_name"].dropna().str.lower().unique().tolist())
     return countries
 
 
 def list_teams(country: str | None = None) -> list[dict[str, Any]]:
-    teams = load_teams()
+    teams = _strip_international(load_teams())
     if country:
         teams = teams[teams["country_name"].str.lower() == country.lower()]
     teams = teams.sort_values(["country_name", "team_name"])
@@ -151,6 +162,37 @@ def get_country_timeseries(country: str) -> list[dict[str, Any]]:
         .sort_values("week")
     )
     return aggregated.to_dict(orient="records")
+
+
+def get_country_top_n_timeseries(country: str, n: int = 5) -> dict[str, Any]:
+    """Latest-week top N clubs in this country (by rating), each club's full weekly rating series."""
+    weekly = load_weekly_ratings()
+    cc = country.lower()
+    country_data = weekly[weekly["country_name"].str.lower() == cc].copy()
+    country_data = _strip_international(country_data)
+    if country_data.empty:
+        return {"teams": []}
+
+    latest_week = int(country_data["week"].max())
+    latest_slice = country_data[country_data["week"] == latest_week].sort_values(
+        "rating", ascending=False
+    )
+    top_pids = latest_slice.head(n)["pid"].astype(int).tolist()
+
+    teams_df = load_teams()
+    teams_out: list[dict[str, Any]] = []
+    for pid in top_pids:
+        sub = country_data[country_data["pid"] == pid].sort_values("week")
+        name_row = teams_df.loc[teams_df["pid"].astype(int) == pid]
+        team_name = (
+            str(name_row.iloc[0]["team_name"])
+            if not name_row.empty
+            else str(sub.iloc[0]["team_name"])
+        )
+        series = sub[["week_date", "rating"]].to_dict(orient="records")
+        teams_out.append({"pid": int(pid), "team_name": team_name, "series": series})
+
+    return {"teams": teams_out}
 
 
 def get_team_club_detail(team_id: int, weekly_limit: int = 15) -> dict[str, Any] | None:
@@ -313,7 +355,12 @@ def get_team_biggest_matches(team_id: int, limit: int = 10) -> dict[str, list[di
 def get_latest_snapshot(top_n: int = 25) -> list[dict[str, Any]]:
     weekly = load_weekly_ratings()
     latest_week = int(weekly["week"].max())
-    latest = weekly[weekly["week"] == latest_week].sort_values("rating", ascending=False).head(top_n)
+    latest = weekly[weekly["week"] == latest_week].copy()
+    # Exclude synthetic international aggregate identities from the startup club ranking table.
+    is_international_country = latest["country_name"].str.lower().eq("international")
+    is_international_name = latest["team_name"].str.endswith(" International", na=False)
+    latest = latest[~(is_international_country | is_international_name)]
+    latest = latest.sort_values("rating", ascending=False).head(top_n)
     return latest[["pid", "team_name", "country_name", "rating", "rd", "week"]].to_dict(orient="records")
 
 
@@ -352,6 +399,7 @@ def get_country_summaries() -> list[dict[str, Any]]:
     merged = country_stats.merge(top_team_rows, on="country_name", how="left")
     merged["country_name"] = merged["country_name"].astype(str)
     merged["week"] = latest_week
+    merged = merged[merged["country_name"].str.lower() != "international"]
 
     return merged[
         [

@@ -39,8 +39,8 @@ Notes
    - compact: '2425' -> converts to '2024/2025' for search
    - fbref: '2024-2025' -> searches for '2024-2025' in Sofascore
 
-2) Club matching is name-based against your existing dim_club.
-   Exact normalised match first, then fuzzy suggestion if needed.
+2) Club matching uses scripts/club_identity.py: canonical keys + Rapidfuzz.
+   High-confidence fuzzy matches merge onto existing dim clubs at ingest time (no orphan ID unless truly novel).
 
 3) Outputs organized by country to enable supplementing with other data sources.
 """
@@ -50,16 +50,11 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-from collections import defaultdict
-import re
 import time
-import unicodedata
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from rapidfuzz import process, fuzz
 from ScraperFC.sofascore import Sofascore
 from ScraperFC.sofascore import comps as SOFASCORE_COMPS
 from ScraperFC.sofascore import API_PREFIX as SOFASCORE_API_PREFIX
@@ -69,7 +64,11 @@ from ScraperFC.utils import botasaurus_browser_get_json
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config.football_ingestion_config import LEAGUE_METADATA
-from scripts.club_name_canonical import canonical_match_key
+from scripts.club_identity import (
+    ClubMatch,
+    build_club_lookup,
+    resolve_or_create_club,
+)
 
 
 # ---------------------------------------------------
@@ -78,7 +77,6 @@ from scripts.club_name_canonical import canonical_match_key
 
 REQUEST_SLEEP_SECONDS = 0.35
 CREATE_MISSING_CLUBS = True
-FUZZY_SUGGESTION_THRESHOLD = 88
 DOMESTIC_COMPETITION_TYPES = {"domestic_league", "domestic_cup"}
 
 
@@ -96,46 +94,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------
 # HELPERS
 # ---------------------------------------------------
-
-def norm_text(s: Any) -> str:
-    """
-    Normalise club names for matching:
-    - lowercase
-    - strip accents
-    - standardise punctuation / whitespace
-    """
-    if s is None:
-        return ""
-
-    s = str(s).strip().lower()
-    s = unicodedata.normalize("NFKD", s)
-    s = "".join(ch for ch in s if not unicodedata.combining(ch))
-
-    replacements = {
-        "&": " and ",
-        "'": "",
-        "'": "",
-        ".": " ",
-        ",": " ",
-        "-": " ",
-        "/": " ",
-    }
-    for old, new in replacements.items():
-        s = s.replace(old, new)
-
-    # common football abbreviations
-    s = re.sub(r"\bfc\b", "", s)
-    s = re.sub(r"\bcf\b", "", s)
-    s = re.sub(r"\bsc\b", "", s)
-    s = re.sub(r"\bac\b", "", s)
-    s = re.sub(r"\bafc\b", "", s)
-    s = re.sub(r"\bsv\b", "", s)
-    s = re.sub(r"\bkv\b", "", s)
-    s = re.sub(r"\buk\b", "", s)
-
-    s = re.sub(r"\s+", " ", s).strip()
-    return s
-
 
 def safe_get(d: dict[str, Any] | None, *keys: str, default: Any = None) -> Any:
     cur: Any = d
@@ -216,74 +174,6 @@ def convert_season_name(season_str: str, season_format: str) -> str | None:
     return None
 
 
-@dataclass
-class ClubMatch:
-    club_id: int | None
-    was_created: bool
-    suggestion: str | None
-    suggestion_score: float | None
-
-
-def suggest_club_match(name: str, dim_club: pd.DataFrame) -> tuple[str | None, float | None]:
-    choices = dim_club["club_name"].astype(str).tolist()
-    if not choices:
-        return None, None
-
-    result = process.extractOne(
-        name,
-        choices,
-        scorer=fuzz.token_set_ratio,
-        score_cutoff=FUZZY_SUGGESTION_THRESHOLD,
-    )
-    if result:
-        return result[0], result[1]
-    return None, None
-
-
-def resolve_or_create_club(
-    club_name: str,
-    dim_club: pd.DataFrame,
-    club_lookup: dict[str, int],
-    country_id: int,
-    next_club_id: int,
-    create_missing: bool = False,
-) -> tuple[ClubMatch, pd.DataFrame, dict[str, int], int]:
-    """Resolve club or create new one if not found."""
-    nm = norm_text(club_name)
-    if not nm:
-        return ClubMatch(None, False, None, None), dim_club, club_lookup, next_club_id
-
-    canon_key = canonical_match_key(nm)
-    if canon_key in club_lookup:
-        club_id = club_lookup[canon_key]
-        return ClubMatch(club_id, False, None, None), dim_club, club_lookup, next_club_id
-
-    suggestion, suggestion_score = suggest_club_match(club_name, dim_club)
-
-    if create_missing:
-        new_club_id = next_club_id
-        new_row = pd.DataFrame([{
-            "club_id": new_club_id,
-            "club_name": club_name,
-            "country_id": country_id,
-        }])
-        dim_club = pd.concat([dim_club, new_row], ignore_index=True)
-        club_lookup[canon_key] = new_club_id
-        return (
-            ClubMatch(new_club_id, True, suggestion, suggestion_score),
-            dim_club,
-            club_lookup,
-            next_club_id + 1,
-        )
-
-    return (
-        ClubMatch(None, False, suggestion, suggestion_score),
-        dim_club,
-        club_lookup,
-        next_club_id,
-    )
-
-
 def is_finished_match(match: dict[str, Any]) -> bool:
     """Check if match has finished."""
     # TEMPORARY: Accept all matches for testing
@@ -295,17 +185,6 @@ def season_name_to_id_map(dim_season: pd.DataFrame) -> dict[str, int]:
         str(row["season_name"]): int(row["season_id"])
         for _, row in dim_season.iterrows()
     }
-
-
-def build_club_lookup(dim_club: pd.DataFrame) -> dict[str, int]:
-    buckets: dict[str, list[int]] = defaultdict(list)
-    for _, row in dim_club.iterrows():
-        nm = norm_text(row["club_name"])
-        if not nm:
-            continue
-        key = canonical_match_key(nm)
-        buckets[key].append(int(row["club_id"]))
-    return {key: min(ids) for key, ids in buckets.items()}
 
 
 def flatten_match_to_fact_row(
@@ -498,6 +377,7 @@ def ingest_league(
                 country_id=country_id,
                 next_club_id=next_club_id,
                 create_missing=CREATE_MISSING_CLUBS,
+                merge_on_fuzzy=True,
             )
 
             away_map, dim_club, club_lookup, next_club_id = resolve_or_create_club(
@@ -507,6 +387,7 @@ def ingest_league(
                 country_id=country_id,
                 next_club_id=next_club_id,
                 create_missing=CREATE_MISSING_CLUBS,
+                merge_on_fuzzy=True,
             )
 
             if home_map.was_created:

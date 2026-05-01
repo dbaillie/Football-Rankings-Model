@@ -1,7 +1,7 @@
 """
 Europe-wide Glicko-2 rating system using continental data.
 
-Usage: python scripts/run_glicko_europe.py
+Usage: python scripts/run_glicko_europe.py [--output-root DIR]
 
 This script:
 1. Loads processed data from fact_result_simple_resolved.csv
@@ -10,6 +10,7 @@ This script:
 4. Saves results to output/europe/
 """
 
+import argparse
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -29,15 +30,23 @@ ANALYTICAL_START_WEEK = 200531
 ANALYTICAL_START_DATE = pd.Timestamp("2005-07-01")
 # If a team is absent this long, treat return as a new entrant and drop prior history segment.
 RESET_AFTER_INACTIVE_WEEKS = 104
-RESOLVED_FACT_PATH = Path("output/fact_result_simple_resolved.csv")
 UEFA_LEAGUE_CODES = frozenset({"UCL", "UEL", "UECL", "EURO"})
 
 
-def load_europe_data():
+def parse_match_dates(series: pd.Series) -> pd.Series:
+    """Parse ISO dates safely, then fall back to mixed/day-first legacy formats."""
+    raw = series.astype(str)
+    iso = pd.to_datetime(raw, format="%Y-%m-%d", errors="coerce")
+    fallback = pd.to_datetime(raw, format="mixed", dayfirst=True, errors="coerce")
+    return iso.fillna(fallback)
+
+
+def load_europe_data(output_root: Path):
     """Load and process all European data from the resolved fact table."""
+    resolved_fact = output_root / "fact_result_simple_resolved.csv"
     # Load the processed data
-    fact_df = pd.read_csv(RESOLVED_FACT_PATH)
-    clubs_df = pd.read_csv('output/dim_club_updated.csv')
+    fact_df = pd.read_csv(resolved_fact)
+    clubs_df = pd.read_csv(output_root / "dim_club_updated.csv")
 
     # Drop rows with missing club IDs or goals
     fact_df = fact_df.dropna(subset=['home_club_id', 'away_club_id', 'home_team_goals', 'away_team_goals'])
@@ -49,7 +58,7 @@ def load_europe_data():
     club_id_to_country = dict(zip(clubs_df['club_id'], clubs_df['country_id']))
 
     # Convert date and create week
-    fact_df['match_date'] = pd.to_datetime(fact_df['match_date'], format='mixed', dayfirst=True)
+    fact_df['match_date'] = parse_match_dates(fact_df['match_date'])
     iso_calendar = fact_df['match_date'].dt.isocalendar()
     fact_df['year'] = iso_calendar.year.astype(int)
     fact_df['week'] = iso_calendar.week.astype(int)
@@ -96,7 +105,7 @@ def load_europe_data():
     ])
 
     # Add country info from clubs
-    country_df = pd.read_csv('output/dim_country_updated.csv')
+    country_df = pd.read_csv(output_root / "dim_country_updated.csv")
     country_id_to_name = dict(zip(country_df['country_id'], country_df['country_name']))
     team_info['country_name'] = team_info['country_id'].map(country_id_to_name)
 
@@ -117,14 +126,15 @@ def load_europe_data():
     return matches_glicko, team_info, unique_club_ids
 
 
-def create_config():
+def create_config(europe_output_dir: Path):
     """Create a config for Europe-wide ratings."""
+    out_s = str(europe_output_dir).replace("\\", "/")
     return {
         "paths": {
             "matches": "europe_matches.csv",
             "rankings": None,
             "players": "europe_teams.csv",
-            "output_dir": "output/europe"
+            "output_dir": out_s,
         },
         "data": {
             "run_id_column": None,
@@ -143,14 +153,14 @@ def create_config():
             "best_init_rating": 1500.0,
             "best_init_rd": 350.0,
             "best_init_sigma": 0.06,
-            "best_tau": 40,
+            "best_tau": .4,
             "best_inactivity_drift": 0.0,
             "max_sigma": 0.1,
             "upset_gate_max": 0.0,
             "upset_gate_k": 0.0,
             "info_gate_scale": 0.0,
-            "inactivity_decay_pts_per_week": 2.5,
-            "inactivity_decay_grace_weeks": 12,
+            "inactivity_decay_pts_per_week": 1.0,
+            "inactivity_decay_grace_weeks": 52,
             "reseed_after_weeks": RESET_AFTER_INACTIVE_WEEKS,
         },
     }
@@ -206,38 +216,54 @@ def trim_history_after_long_absence(weekly_ratings: pd.DataFrame) -> pd.DataFram
     return pd.concat(cleaned_parts, ignore_index=True)
 
 
-def run_data_model():
+def run_data_model(output_root: Path):
     """Ensure prerequisite data exists before running Europe ratings."""
-    output_dir = Path('output')
-    fact_file = output_dir / 'fact_result_simple_resolved.csv'
-    clubs_file = output_dir / 'dim_club.csv'
+    fact_file = output_root / "fact_result_simple_resolved.csv"
+    clubs_file = output_root / "dim_club.csv"
 
     if not fact_file.exists() or not clubs_file.exists():
         raise FileNotFoundError(
-            "Missing prerequisite files. Expected output/fact_result_simple_resolved.csv and output/dim_club.csv. "
+            f"Missing prerequisite files. Expected {fact_file} and {clubs_file}. "
             "Run pipeline first: create_data_model.py -> ingest_leagues_from_config.py -> resolve_club_identities.py --write"
         )
     else:
         print("Prerequisite data found.")
 
 
+def _parse_cli_args():
+    p = argparse.ArgumentParser(description="Europe-wide Glicko-2 ratings from resolved fact table.")
+    p.add_argument(
+        "--output-root",
+        type=str,
+        default="output",
+        help="Directory containing fact_result_simple_resolved.csv, dim_club_updated.csv, dim_country_updated.csv (default: output)",
+    )
+    return p.parse_args()
+
+
 def main():
     """Run Europe-wide Glicko-2 ratings."""
+    args = _parse_cli_args()
+    output_root = Path(args.output_root)
+    if not output_root.is_absolute():
+        output_root = (Path.cwd() / output_root).resolve()
+
     # Ensure data model exists
-    run_data_model()
+    run_data_model(output_root)
 
     print("Processing Europe-wide Glicko-2 ratings...")
 
     try:
+        resolved_fact_path = output_root / "fact_result_simple_resolved.csv"
         # Load all European data
-        matches_df, teams_df, club_ids = load_europe_data()
+        matches_df, teams_df, club_ids = load_europe_data(output_root)
 
         if matches_df.empty:
             print("No matches found")
             return
 
         # Create output directory
-        output_dir = Path("output/europe")
+        output_dir = output_root / "europe"
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Save processed data (without country_name column for Glicko)
@@ -246,7 +272,7 @@ def main():
         teams_df.to_csv(output_dir / "europe_teams.csv", index=False)
 
         # Create config
-        config = create_config()
+        config = create_config(output_dir)
         with open(output_dir / "config.json", "w") as f:
             json.dump(config, f, indent=2)
 
@@ -329,9 +355,9 @@ def main():
         print("\nCreating detailed match results...")
         
         # Reload original match data with all details
-        fact_df = pd.read_csv(RESOLVED_FACT_PATH)
+        fact_df = pd.read_csv(resolved_fact_path)
         fact_df = fact_df.dropna(subset=['home_club_id', 'away_club_id', 'home_team_goals', 'away_team_goals'])
-        fact_df['match_date'] = pd.to_datetime(fact_df['match_date'], format='mixed', dayfirst=True)
+        fact_df['match_date'] = parse_match_dates(fact_df['match_date'])
         iso_calendar = fact_df['match_date'].dt.isocalendar()
         fact_df['year'] = iso_calendar.year.astype(int)
         fact_df['week'] = iso_calendar.week.astype(int)

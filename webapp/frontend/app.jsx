@@ -1,27 +1,49 @@
 const { useEffect, useMemo, useState } = React;
 
-/** Matches light theme in index.html (Stadium daylight) */
+/** Matches dark theme tokens in index.html */
 const THEME = {
-  text: "#121826",
-  muted: "#5c6778",
-  primary: "#1e5eff",
-  accent: "#e85d04",
-  success: "#0f766e",
-  geoLand: "#eef2f6",
-  geoBorder: "#c5ced9",
-  geoOcean: "#d9e6ff",
-  plotPaper: "#ffffff",
-  plotGrid: "#eef1f5",
+  text: "#F8FAFC",
+  muted: "#94A3B8",
+  primary: "#1E3A5F",
+  primaryBright: "#60A5FA",
+  accent: "#D6A84F",
+  success: "#60A5FA",
+  geoLand: "#1E293B",
+  geoBorder: "#475569",
+  geoOcean: "#0B1220",
+  plotPaper: "#111827",
+  plotGrid: "#1E293B",
 };
 
-/** Choropleth / markers: low (weak) → high (strong); light blue → dark blue */
+const UEFA_CODES = new Set(["UCL", "UEL", "UECL", "EURO"]);
+
+/** Lines for country “current top 5 over time” chart (distinct from map heat ramp). */
+const COUNTRY_TOP5_LINE_COLORS = ["#60A5FA", "#D6A84F", "#A78BFA", "#2DD4BF", "#FB923C"];
+
+/** Choropleth / markers: weak → strong (all blue — no green in the heat ramp) */
 const MAP_HEAT_COLORSCALE = [
-  [0, "#e8f4fc"],
-  [0.25, "#bfdbfe"],
-  [0.5, "#60a5fa"],
-  [0.75, "#2563eb"],
-  [1, "#172554"],
+  [0, "#1e293b"],
+  [0.2, "#1e3a5f"],
+  [0.45, "#2563eb"],
+  [0.68, "#3b82f6"],
+  [0.88, "#60a5fa"],
+  [1, "#93c5fd"],
 ];
+
+function CompetitionBadge({ code }) {
+  const raw = String(code ?? "").trim();
+  const u = raw.toUpperCase();
+  if (UEFA_CODES.has(u)) {
+    return <span className="badge badge-uefa">{u}</span>;
+  }
+  if (/^[A-Z]\d+$/.test(u)) {
+    return <span className="badge badge-domestic">{u}</span>;
+  }
+  if (!raw) {
+    return <span className="badge badge-default">—</span>;
+  }
+  return <span className="badge badge-default">{raw}</span>;
+}
 
 function mapHeatValue(p) {
   const best = Number(p.top_team_rating);
@@ -147,8 +169,6 @@ const COUNTRY_MAP_COORDS = {
   sweden: { lat: 62.0, lon: 15.0, label: "Sweden" },
   switzerland: { lat: 46.8, lon: 8.2, label: "Switzerland" },
   turkey: { lat: 39.0, lon: 35.2, label: "Turkey" },
-  /* UEFA / national-team style rows use dim country "International" — not on choropleth, marker-only */
-  international: { lat: 46.2, lon: 8.3, label: "International (UEFA)" },
 };
 
 const CHOROPLETH_LOCATION_BY_COUNTRY = {
@@ -172,10 +192,6 @@ const CHOROPLETH_LOCATION_BY_COUNTRY = {
   switzerland: "Switzerland",
   turkey: "Turkey",
 };
-
-function formatMatch(row) {
-  return `${row.home_team_name} ${row.home_goals}-${row.away_goals} ${row.away_team_name}`;
-}
 
 /** Title-case country labels from API slugs (e.g. england → England, bosnia-herzegovina → Bosnia-Herzegovina). */
 function formatCountryDisplay(name) {
@@ -259,7 +275,7 @@ function App() {
   const [hoveredCountry, setHoveredCountry] = useState("");
 
   const [teamSeries, setTeamSeries] = useState([]);
-  const [countrySeries, setCountrySeries] = useState([]);
+  const [countryTopSeries, setCountryTopSeries] = useState(null);
   const [biggestMatches, setBiggestMatches] = useState({ upsets: [], swings: [] });
   const [topSnapshot, setTopSnapshot] = useState([]);
 
@@ -343,29 +359,34 @@ function App() {
 
   useEffect(() => {
     const parsed = parseHashRouteFromString(hash);
-    if (parsed.page !== "country" || !parsed.country) return;
+    if (parsed.page !== "country" || !parsed.country) {
+      setCountryTopSeries(null);
+      return;
+    }
     const slug = parsed.country;
     let cancelled = false;
 
-    async function loadCountrySeries() {
+    async function loadCountryTopFive() {
       try {
-        const [countryData, countryTeams] = await Promise.all([
-          getJson(`/api/country/${slug}/timeseries`),
+        const [topPayload, countryTeams] = await Promise.all([
+          getJson(`/api/country/${slug}/top-timeseries`, { allow404: true }),
           getJson(`/api/teams?country=${slug}`),
         ]);
         if (cancelled) return;
-        setCountrySeries(countryData);
-        if (countryTeams.length > 0) {
-          setSelectedTeamId(String(countryTeams[0].pid));
-        } else {
-          setSelectedTeamId("");
-        }
+        const payload =
+          topPayload && Array.isArray(topPayload.teams) ? topPayload : { teams: [] };
+        setCountryTopSeries(payload);
+        const topIds = payload.teams.map((t) => String(t.pid));
+        const firstPick =
+          topIds.find((id) => countryTeams.some((t) => String(t.pid) === id)) ||
+          (countryTeams[0] ? String(countryTeams[0].pid) : "");
+        setSelectedTeamId(firstPick);
       } catch (err) {
         if (!cancelled) setError(err.message);
       }
     }
 
-    loadCountrySeries();
+    loadCountryTopFive();
     return () => {
       cancelled = true;
     };
@@ -411,6 +432,9 @@ function App() {
 
   useEffect(() => {
     if (!selectedTeamId) return;
+    const parsed = parseHashRouteFromString(hash);
+    if (parsed.page === "country") return;
+
     let cancelled = false;
 
     async function loadTeamDetail() {
@@ -431,7 +455,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [selectedTeamId]);
+  }, [selectedTeamId, hash]);
 
   useEffect(() => {
     if (route.page !== "country" || !route.country || !countries.length) return;
@@ -533,8 +557,15 @@ function App() {
       colorscale: MAP_HEAT_COLORSCALE,
       zmin: minHeat,
       zmax: maxHeat,
-      marker: { line: { color: "#ffffff", width: 0.6 } },
-      colorbar: { title: "Best team<br>rating", titleside: "right" },
+      marker: { line: { color: "#334155", width: 0.8 } },
+      colorbar: {
+        title: { text: "Best team<br>rating", font: { color: THEME.muted, size: 12 } },
+        titleside: "right",
+        tickfont: { color: THEME.muted, size: 11 },
+        bgcolor: "rgba(17,24,39,0.92)",
+        bordercolor: "#334155",
+        borderwidth: 1,
+      },
     },
     {
       type: "scattergeo",
@@ -565,7 +596,7 @@ function App() {
         colorscale: MAP_HEAT_COLORSCALE,
         cmin: minHeat,
         cmax: maxHeat,
-        line: { color: "#ffffff", width: 1.2 },
+        line: { color: "#475569", width: 1.2 },
         opacity: 0.95,
         showscale: false,
       },
@@ -596,32 +627,47 @@ function App() {
         lonaxis: { range: [-12, 45] },
         domain: { x: [0, 1], y: [0, 1] },
       },
-      margin: { l: 4, r: 96, t: 42, b: 6 },
+      margin: { l: 4, r: 104, t: 48, b: 10 },
     }),
     [mapDims.w, mapDims.h]
   );
 
-  const countryPlotLayout = {
+  const countryTopFivePlotLayout = {
     title: {
-      text: "Average and Top Ratings Over Time",
+      text: "Current top 5 clubs — rating history",
       font: { color: THEME.text },
     },
     font: { color: THEME.text },
     paper_bgcolor: THEME.plotPaper,
     plot_bgcolor: THEME.plotGrid,
+    legend: {
+      orientation: "h",
+      yanchor: "bottom",
+      y: 1.02,
+      xanchor: "left",
+      x: 0,
+      font: { color: THEME.muted, size: 11 },
+      bgcolor: "rgba(17,24,39,0.75)",
+      bordercolor: "#334155",
+      borderwidth: 1,
+    },
     xaxis: {
-      title: "Date",
-      gridcolor: "#dde3eb",
-      zerolinecolor: "#dde3eb",
+      title: { text: "Week start", font: { color: THEME.muted, size: 12 } },
+      gridcolor: "#334155",
+      zerolinecolor: "#334155",
+      tickfont: { color: THEME.muted, size: 11 },
       color: THEME.muted,
+      linecolor: "#334155",
     },
     yaxis: {
-      title: "Glicko-2 Rating",
-      gridcolor: "#dde3eb",
-      zerolinecolor: "#dde3eb",
+      title: { text: "Glicko-2 Rating", font: { color: THEME.muted, size: 12 } },
+      gridcolor: "#334155",
+      zerolinecolor: "#334155",
+      tickfont: { color: THEME.muted, size: 11 },
       color: THEME.muted,
+      linecolor: "#334155",
     },
-    margin: { l: 50, r: 20, t: 50, b: 40 },
+    margin: { l: 50, r: 20, t: 56, b: 40 },
   };
 
   const teamPlotLayout = {
@@ -632,17 +678,27 @@ function App() {
     font: { color: THEME.text },
     paper_bgcolor: THEME.plotPaper,
     plot_bgcolor: THEME.plotGrid,
+    legend: {
+      font: { color: THEME.muted, size: 12 },
+      bgcolor: "rgba(17,24,39,0.75)",
+      bordercolor: "#334155",
+      borderwidth: 1,
+    },
     xaxis: {
-      title: "Date",
-      gridcolor: "#dde3eb",
-      zerolinecolor: "#dde3eb",
+      title: { text: "Date", font: { color: THEME.muted, size: 12 } },
+      gridcolor: "#334155",
+      zerolinecolor: "#334155",
+      tickfont: { color: THEME.muted, size: 11 },
       color: THEME.muted,
+      linecolor: "#334155",
     },
     yaxis: {
-      title: "Glicko-2 Rating",
-      gridcolor: "#dde3eb",
-      zerolinecolor: "#dde3eb",
+      title: { text: "Glicko-2 Rating", font: { color: THEME.muted, size: 12 } },
+      gridcolor: "#334155",
+      zerolinecolor: "#334155",
+      tickfont: { color: THEME.muted, size: 11 },
       color: THEME.muted,
+      linecolor: "#334155",
     },
     margin: { l: 50, r: 20, t: 50, b: 40 },
   };
@@ -654,28 +710,25 @@ function App() {
       mode: "lines+markers",
       type: "scatter",
       name: selectedTeam ? selectedTeam.team_name : "Team",
-      line: { color: THEME.primary, width: 2 },
+      line: { color: THEME.primaryBright, width: 2.5 },
     },
   ];
 
-  const countryTrendData = [
-    {
-      x: countrySeries.map((d) => d.week_date),
-      y: countrySeries.map((d) => d.average_rating),
+  const countryTopFivePlotData = useMemo(() => {
+    const teams = countryTopSeries?.teams;
+    if (!teams || teams.length === 0) return [];
+    return teams.map((t, i) => ({
+      x: t.series.map((p) => p.week_date),
+      y: t.series.map((p) => p.rating),
       mode: "lines",
       type: "scatter",
-      name: "Average Rating",
-      line: { color: THEME.success, width: 2 },
-    },
-    {
-      x: countrySeries.map((d) => d.week_date),
-      y: countrySeries.map((d) => d.top_rating),
-      mode: "lines",
-      type: "scatter",
-      name: "Top Team Rating",
-      line: { color: THEME.accent, width: 2 },
-    },
-  ];
+      name: t.team_name,
+      line: {
+        color: COUNTRY_TOP5_LINE_COLORS[i % COUNTRY_TOP5_LINE_COLORS.length],
+        width: 2,
+      },
+    }));
+  }, [countryTopSeries]);
 
   const countryPageSummary =
     route.page === "country" && route.country ? summaryByCountry.get(route.country) : null;
@@ -693,7 +746,34 @@ function App() {
         : "";
 
   return (
-    <div className="container">
+    <>
+      <header className="site-header">
+        <div className="site-header-inner">
+          <a
+            href="#/"
+            className="site-brand"
+            onClick={(e) => {
+              e.preventDefault();
+              navigate("/");
+            }}
+          >
+            <span className="site-brand-mark" aria-hidden />
+            Football rankings
+          </a>
+          <nav className="site-nav" aria-label="Primary">
+            <a
+              href="#/"
+              onClick={(e) => {
+                e.preventDefault();
+                navigate("/");
+              }}
+            >
+              Map & top 25
+            </a>
+          </nav>
+        </div>
+      </header>
+      <main id="main-content" className="container">
       {error && route.page !== "club" && <div className="card error">{error}</div>}
 
       {route.page === "club" ? (
@@ -725,7 +805,7 @@ function App() {
           </nav>
 
           {clubLoading || (loading && !clubDetail && !clubError) ? (
-            <div className="card">
+            <div className="card card-muted loading-pulse">
               <p>Loading club data…</p>
               <p className="small" style={{ marginBottom: 0 }}>
                 First load reads match history from disk and can take{" "}
@@ -862,7 +942,9 @@ function App() {
                             {row.team_goals}-{row.opponent_goals}
                           </td>
                           <td>{row.opponent_name}</td>
-                          <td>{row.competition}</td>
+                          <td>
+                            <CompetitionBadge code={row.competition} />
+                          </td>
                           <td
                             className={
                               Number(row.rating_change) >= 0 ? "numeric-pos" : "numeric-neg"
@@ -897,7 +979,7 @@ function App() {
           </nav>
 
           {loading || countries.length === 0 ? (
-            <div className="card">Loading country…</div>
+            <div className="card card-muted loading-pulse">Loading country…</div>
           ) : !countrySlugKnown ? (
             <div className="card error">
               Unknown country “{formatCountryDisplay(route.country)}”.{" "}
@@ -919,7 +1001,8 @@ function App() {
                 )}
               </h1>
               <p className="small">
-                Ratings summary for this nation. Choose a team for movement charts and notable matches.
+                Nation-level snapshot and how today&apos;s strongest clubs evolved week by week. Use the team
+                picker to open a club&apos;s full match history.
               </p>
 
               {countryPageSummary && (
@@ -960,77 +1043,37 @@ function App() {
               </div>
 
               <div className="card">
-                <h2>Country movement</h2>
-                <Plot data={countryTrendData} layout={countryPlotLayout} />
-              </div>
-
-              <div className="card">
-                <h2>Team movement: {selectedTeam ? selectedTeam.team_name : "Team"}</h2>
-                <Plot data={teamTrendData} layout={teamPlotLayout} />
-              </div>
-
-              <div className="card">
-                <h2>Biggest upsets</h2>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Match</th>
-                      <th>Competition</th>
-                      <th>Upset magnitude</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {biggestMatches.upsets.map((row, index) => (
-                      <tr key={`upset-${index}`}>
-                        <td>{String(row.match_date).slice(0, 10)}</td>
-                        <td>{formatMatch(row)}</td>
-                        <td>{row.competition}</td>
-                        <td>{row.upset_magnitude.toFixed(3)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="card">
-                <h2>Largest rating swings</h2>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Match</th>
-                      <th>Competition</th>
-                      <th>Total swing</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {biggestMatches.swings.map((row, index) => (
-                      <tr key={`swing-${index}`}>
-                        <td>{String(row.match_date).slice(0, 10)}</td>
-                        <td>{formatMatch(row)}</td>
-                        <td>{row.competition}</td>
-                        <td>{row.absolute_rating_swing.toFixed(2)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <h2>Current top 5 — history over time</h2>
+                <p className="small" style={{ marginTop: "-8px" }}>
+                  The five highest-rated clubs in this country in the latest rating week; each line follows that
+                  club across all rating weeks in the dataset.
+                </p>
+                {countryTopFivePlotData.length === 0 ? (
+                  <p className="small" style={{ marginBottom: 0 }}>
+                    No weekly series loaded yet — wait for data or pick another country.
+                  </p>
+                ) : (
+                  <Plot data={countryTopFivePlotData} layout={countryTopFivePlotLayout} />
+                )}
               </div>
             </>
           )}
         </>
       ) : (
         <>
-          <h1>European Football Glicko-2 Dashboard</h1>
-          <p className="small">
-            Hover for snapshots; <strong>click a country</strong> on the map to open its summary page.
-          </p>
+          <header className="page-hero">
+            <p className="sub-head">Glicko-2 · European clubs</p>
+            <h1>Ratings dashboard</h1>
+            <p className="small">
+              Hover countries for a snapshot; <strong>click</strong> to open detail. Rankings below stay in sync with the latest rating week.
+            </p>
+          </header>
 
           <section className="map-full-width" aria-label="European ratings map">
             <div className="card">
               <h2>European Ratings Map</h2>
               <p className="small" style={{ marginTop: "-6px", marginBottom: "12px" }}>
-                Country shading uses each nation&apos;s <strong>best</strong> club rating (light blue = lower, dark blue = higher).
+                Shading shows each nation&apos;s <strong>strongest</strong> club — deeper slate blues are weaker; brighter royal blues are stronger.
               </p>
               <div ref={mapHostRef} className="map-plot-host">
                 <Plot
@@ -1062,13 +1105,22 @@ function App() {
             </div>
           </section>
 
-          {loading && <div className="card">Loading data…</div>}
+          {loading && (
+            <div className="card card-muted loading-pulse" aria-busy="true">
+              Loading data…
+            </div>
+          )}
 
           <div className="card">
-            <h2>Current Top 25 (Latest Week)</h2>
+            <h2>Current top 25</h2>
+            <p className="small" style={{ marginTop: "-8px", marginBottom: "14px" }}>
+              Latest rating week. Rows are clickable — open a club&apos;s full history.
+            </p>
+            <div className="table-scroll">
             <table>
               <thead>
                 <tr>
+                  <th>#</th>
                   <th>Team</th>
                   <th>Country</th>
                   <th>Rating</th>
@@ -1076,20 +1128,39 @@ function App() {
                 </tr>
               </thead>
               <tbody>
-                {topSnapshot.map((row) => (
-                  <tr key={row.pid}>
+                {topSnapshot.map((row, idx) => (
+                  <tr
+                    key={row.pid}
+                    className="click-row"
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Open ${row.team_name}, ranked ${idx + 1}`}
+                    onClick={() => navigate(`/club/${row.pid}`)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        navigate(`/club/${row.pid}`);
+                      }
+                    }}
+                  >
+                    <td>
+                      <span className="rank-cell">{idx + 1}</span>
+                    </td>
                     <td>{row.team_name}</td>
                     <td>{formatCountryDisplay(row.country_name)}</td>
-                    <td>{row.rating.toFixed(1)}</td>
+                    <td className="rating-strong">{row.rating.toFixed(1)}</td>
                     <td>{row.rd.toFixed(1)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            </div>
+            <p className="kbd-hint">Tip: press Enter on a focused row to open the club page.</p>
           </div>
         </>
       )}
-    </div>
+      </main>
+    </>
   );
 }
 

@@ -1,10 +1,11 @@
 """
 Resolve duplicate/unknown club IDs in fact data by:
 1) created_clubs.csv: map created_club_id -> existing dim_club id via suggested_existing_match
-   (optional --min-suggestion-score to skip weak fuzzy suggestions from ingestion)
+   (ingestion now applies fuzzy merges live via scripts/club_identity.py — this mainly catches legacy rows.)
+   Optional --min-suggestion-score to skip weak fuzzy suggestions from older ingest logs.
 2) Canonical name collisions in dim (e.g. Man City vs Manchester City): map duplicate ids -> min(club_id)
 3) Fixtures: same (date, score) and same home (or same away) with two different partner ids —
-   if one partner is a created id and one is not, map created -> canonical
+   if one partner is a created id and one is not, map created -> canonical (never overrides (1)-(2))
 4) Deduplicate rows after remapping (same match identity columns, keep first result_id)
 
 Club_1111 example: created_clubs lists "FC Bayern München" -> suggested "Bayern Munich" -> dim club_id 349.
@@ -18,9 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
-import unicodedata
 from collections import defaultdict
 from pathlib import Path
 
@@ -31,19 +30,12 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from scripts.club_name_canonical import canonical_match_key
+from scripts.club_identity import norm_club_name
 
 
 def norm_name(s: str) -> str:
-    if s is None or (isinstance(s, float) and pd.isna(s)):
-        return ""
-    t = str(s).strip().lower()
-    t = unicodedata.normalize("NFKD", t)
-    t = "".join(ch for ch in t if not unicodedata.combining(ch))
-    for a, b in [("&", " and "), ("'", ""), (".", " "), (",", " "), ("-", " ")]:
-        t = t.replace(a, b)
-    t = re.sub(r"\b(fc|cf|sc|ac|sv|kv|afc)\b", "", t)
-    t = re.sub(r"\s+", " ", t).strip()
-    return t
+    """Backward-compatible alias for resolve-stage lookups (same rules as ingest)."""
+    return norm_club_name(s)
 
 
 def build_dim_lookups(dim: pd.DataFrame) -> dict[str, list[int]]:
@@ -167,10 +159,18 @@ def from_fixtures(
 
 
 def merge_remappings(*maps: dict[int, int]) -> dict[int, int]:
+    """
+    Merge remap dicts in priority order (first wins per source id).
+
+    `main()` passes (created_clubs suggestions, canonical collisions, fixture dedupe).
+    Fixture overlap can guess wrong when unrelated leagues share (date, score, side);
+    never let it override explicit suggestions or canonical name merges.
+    """
     combined: dict[int, int] = {}
     for m in maps:
         for k, v in m.items():
-            combined[k] = v
+            if k not in combined:
+                combined[k] = v
     # Transitive: follow chains to canonical
     changed = True
     while changed:
@@ -202,6 +202,37 @@ def dedupe_fact(fact: pd.DataFrame) -> pd.DataFrame:
     return fact.drop_duplicates(subset=base, keep="first").reset_index(drop=True)
 
 
+def dedupe_uefa_remerge_twins(fact: pd.DataFrame) -> pd.DataFrame:
+    """
+    When resolve is run with `--fact` pointing at an already-resolved table, euro rows are
+    concatenated again. Identity fixes then remap new euro IDs correctly while stale copies keep
+    wrong club IDs, producing two rows for the same fixture (same date/score/home or away).
+
+    Collapse UEFA club phases (UCL/UEL/UECL only): keep the last row per scoreline key so the
+    freshly appended remapped slice wins over older stale IDs.
+    """
+    codes = {"UCL", "UEL", "UECL"}
+    if "league_code" not in fact.columns:
+        return fact
+    lc = fact["league_code"].astype(str)
+    mask = lc.isin(codes)
+    if not mask.any():
+        return fact
+
+    dom = fact[~mask].copy()
+    uefa = fact[mask].copy()
+    keys_home = ["match_date", "league_code", "home_club_id", "home_team_goals", "away_team_goals"]
+    keys_away = ["match_date", "league_code", "away_club_id", "home_team_goals", "away_team_goals"]
+    if len([c for c in keys_home if c in uefa.columns]) < len(keys_home):
+        return fact
+
+    uefa = uefa.drop_duplicates(subset=keys_home, keep="last")
+    uefa = uefa.drop_duplicates(subset=keys_away, keep="last")
+    out = pd.concat([dom, uefa], ignore_index=True)
+    sort_cols = [c for c in ("country_name", "league_code", "match_date", "result_id") if c in out.columns]
+    return out.sort_values(sort_cols, kind="mergesort").reset_index(drop=True)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     root = Path(__file__).resolve().parents[1]
@@ -227,7 +258,8 @@ def main() -> None:
 
     fact = pd.read_csv(args.fact, low_memory=False)
 
-    euro_fact_path = root / "output" / "fact_result_simple_ingested_euro.csv"
+    out_root = args.out_fact.resolve().parent
+    euro_fact_path = out_root / "fact_result_simple_ingested_euro.csv"
     if not args.skip_euro_merge and euro_fact_path.exists():
         euro_fact = pd.read_csv(euro_fact_path, low_memory=False)
         if not euro_fact.empty:
@@ -253,7 +285,7 @@ def main() -> None:
     if not created.empty and "suggested_existing_match" not in created.columns and "suggested_match" in created.columns:
         created = created.rename(columns={"suggested_match": "suggested_existing_match"})
 
-    euro_created_path = root / "output" / "created_clubs_euro.csv"
+    euro_created_path = out_root / "created_clubs_euro.csv"
     if not args.skip_euro_merge and euro_created_path.exists():
         euro_created = pd.read_csv(euro_created_path, low_memory=False)
         if not euro_created.empty:
@@ -289,6 +321,7 @@ def main() -> None:
 
     resolved = apply_remap(fact, remap)
     resolved = dedupe_fact(resolved)
+    resolved = dedupe_uefa_remerge_twins(resolved)
     n_rows_before = before_dedup
     n_rows_after = len(resolved)
 

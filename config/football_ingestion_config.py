@@ -4,8 +4,9 @@
 
 SOURCE_SYSTEM = "SofaScore"
 
-SEASON_START_YEAR = 2020
-SEASON_END_YEAR = 2025
+# Widest window aligned with dim_season YYYY/YYYY rows (earliest 2012/2013) for UEFA/domestic FBref pairing.
+SEASON_START_YEAR = 2012
+SEASON_END_YEAR = 2026
 
 
 # =========================================================
@@ -47,9 +48,10 @@ LEAGUES = [
     "UEFA European Championship",
     "Ukraine Premier League",
     "USA MLS",
-    "USA USL Championship",
+    # Strings must match ScraperFC comps.yaml keys (see scripts/report_scraperfc_source_coverage.py).
+    "USA USL championship",
     "USA USL League 1",
-    "USA USL League 2",
+    "USA USL Leauge 2",
 ]
 
 
@@ -441,7 +443,7 @@ LEAGUE_METADATA = [
         "season_format": "start_year",
     },
     {
-        "source_league_name": "USA USL Championship",
+        "source_league_name": "USA USL championship",
         "league_key": "USA2",
         "league_name": "USL Championship",
         "country": "USA",
@@ -461,7 +463,7 @@ LEAGUE_METADATA = [
         "season_format": "start_year",
     },
     {
-        "source_league_name": "USA USL League 2",
+        "source_league_name": "USA USL Leauge 2",
         "league_key": "USA4",
         "league_name": "USL League 2",
         "country": "USA",

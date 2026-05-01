@@ -23,13 +23,8 @@ from ScraperFC.sofascore import Sofascore
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config.football_ingestion_config import LEAGUE_METADATA
-from scripts.ingest_leagues_from_config import (
-    ingest_league,
-    load_dims,
-    logger,
-    build_club_lookup,
-    resolve_or_create_club,
-)
+from scripts.club_identity import build_club_lookup, resolve_or_create_club
+from scripts.ingest_leagues_from_config import ingest_league, load_dims, logger
 
 UEFA_LEAGUE_KEYS = {"UCL", "UEL", "UECL", "EURO"}
 FOOTBALL_DATA_COMP_CODES = {
@@ -153,6 +148,7 @@ def ingest_league_football_data_org(
             country_id=country_id,
             next_club_id=next_club_id,
             create_missing=True,
+            merge_on_fuzzy=True,
         )
         away_map, dim_club, club_lookup, next_club_id = resolve_or_create_club(
             club_name=away_name,
@@ -161,6 +157,7 @@ def ingest_league_football_data_org(
             country_id=country_id,
             next_club_id=next_club_id,
             create_missing=True,
+            merge_on_fuzzy=True,
         )
 
         if home_map.was_created:

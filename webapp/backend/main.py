@@ -15,6 +15,7 @@ from .data_service import (
     clear_data_caches,
     get_country_summaries,
     get_country_timeseries,
+    get_country_top_n_timeseries,
     get_latest_snapshot,
     get_team_biggest_matches,
     get_team_club_detail,
@@ -170,6 +171,16 @@ def country_timeseries(country: str) -> list[dict]:
     if not series:
         raise HTTPException(status_code=404, detail="Country not found in weekly ratings data.")
     return series
+
+
+@app.get("/api/country/{country}/top-timeseries")
+def country_top_timeseries(
+    country: str, n: int = Query(default=5, ge=1, le=20)
+) -> dict:
+    payload = get_country_top_n_timeseries(country, n=n)
+    if not payload.get("teams"):
+        raise HTTPException(status_code=404, detail="Country not found in weekly ratings data.")
+    return payload
 
 
 @app.get("/api/team/{team_id}/biggest-matches")
