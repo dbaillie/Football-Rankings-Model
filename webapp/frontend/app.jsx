@@ -141,8 +141,12 @@ function Plot({ data, layout, config, onClick, onHover, className }) {
   return (
     <div
       ref={ref}
-      className={className}
-      style={{ width: "100%", minHeight: className === "map-plot-host" ? undefined : 420 }}
+      className={className === "map-plot-host" ? `${className} map-plot-fill` : className}
+      style={{
+        width: "100%",
+        height: className === "map-plot-host" ? "100%" : undefined,
+        minHeight: className === "map-plot-host" ? undefined : 420,
+      }}
     />
   );
 }
@@ -235,6 +239,9 @@ function parseHashRouteFromString(hash) {
       return { page: "club", teamId: String(teamId) };
     }
   }
+  if (segments[0] === "info") {
+    return { page: "info" };
+  }
   return { page: "home" };
 }
 
@@ -266,6 +273,227 @@ function useHashRoute() {
   return { route, navigate, hash };
 }
 
+function ContactForm() {
+  const [enabled, setEnabled] = useState(null);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [company, setCompany] = useState("");
+  const [status, setStatus] = useState("idle");
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    let cancel = false;
+    getJson("/api/contact/status", { allow404: true })
+      .then((d) => {
+        if (!cancel) setEnabled(Boolean(d && d.enabled));
+      })
+      .catch(() => {
+        if (!cancel) setEnabled(false);
+      });
+    return () => {
+      cancel = true;
+    };
+  }, []);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setErr("");
+    setStatus("sending");
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim(),
+          message: message.trim(),
+          company,
+        }),
+      });
+      const text = await res.text();
+      let detailMsg = text || `HTTP ${res.status}`;
+      try {
+        const body = JSON.parse(text);
+        if (typeof body.detail === "string") detailMsg = body.detail;
+        else if (Array.isArray(body.detail))
+          detailMsg = body.detail.map((x) => x.msg || JSON.stringify(x)).join("; ");
+      } catch (_) {
+        /* leave detailMsg */
+      }
+      if (!res.ok) throw new Error(detailMsg);
+      setStatus("success");
+      setName("");
+      setEmail("");
+      setMessage("");
+      setCompany("");
+    } catch (x) {
+      setStatus("idle");
+      setErr(x.message || "Something went wrong.");
+    }
+  }
+
+  const sending = status === "sending";
+  const canSubmit = enabled === true && !sending;
+
+  return (
+    <div className="card contact-card">
+      <h2>Contact me</h2>
+      <p className="small" style={{ marginTop: "-8px", marginBottom: "14px" }}>
+        Send a note about this project or the ratings. Your email is only used to reply.
+      </p>
+      {enabled === false ? (
+        <p className="small" style={{ marginBottom: 0 }}>
+          Sending is not configured on this server yet (SMTP environment variables). Check{" "}
+          <code>/api/health</code> for <code>contact_email</code> — it should read{" "}
+          <code>configured</code> once env vars are set.
+        </p>
+      ) : (
+        <form className="contact-form" onSubmit={handleSubmit}>
+          <div className="field hp-field" aria-hidden="true">
+            <label htmlFor="contact-company">Company</label>
+            <input
+              id="contact-company"
+              name="company"
+              type="text"
+              tabIndex={-1}
+              autoComplete="off"
+              value={company}
+              onChange={(e) => setCompany(e.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="contact-name">Name</label>
+            <input
+              id="contact-name"
+              name="name"
+              type="text"
+              required
+              maxLength={200}
+              autoComplete="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={sending}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="contact-email">Email</label>
+            <input
+              id="contact-email"
+              name="email"
+              type="email"
+              required
+              maxLength={320}
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={sending}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="contact-message">Message</label>
+            <textarea
+              id="contact-message"
+              name="message"
+              required
+              maxLength={8000}
+              rows={6}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              disabled={sending}
+            />
+          </div>
+          {err ? (
+            <p className="small" style={{ color: "#f87171", marginBottom: "10px" }}>
+              {err}
+            </p>
+          ) : null}
+          {status === "success" ? (
+            <p className="contact-success" style={{ marginBottom: "10px" }}>
+              Thanks — your message was sent.
+            </p>
+          ) : null}
+          <button type="submit" className="contact-send" disabled={!canSubmit}>
+            {enabled === null ? "Checking…" : sending ? "Sending…" : "Send message"}
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+/** Renders narrative strings that use **markers** as bold (template-controlled; not raw HTML). */
+function InfoPage({ navigate }) {
+  return (
+    <>
+      <header className="page-hero">
+        <h1>Method</h1>
+        <p className="small">
+          Short overview of how club <strong>ratings</strong> are produced and what you are seeing on the map and
+          club pages.
+        </p>
+      </header>
+
+      <div className="card">
+        <h2>Rating system</h2>
+        <p className="small" style={{ marginBottom: "12px" }}>
+          Each club has a <strong>rating</strong> (strength estimate) and uncertainty that update after matches.
+          The pipeline uses the <strong>Glicko-2</strong> algorithm — an extension of Elo meant for paired contests
+          with sparse play — adapted here to football results grouped into <strong>rating weeks</strong> (not always
+          one update per match day).
+        </p>
+        <p className="small" style={{ marginBottom: 0 }}>
+          Higher <strong>rating</strong> ⇒ stronger expected performance vs typical opponents; margins and surprise
+          results move ratings more than predictable wins.
+        </p>
+      </div>
+
+      <div className="card">
+        <h2>Using the site</h2>
+        <ul className="small info-list">
+          <li>
+            <strong>Map & top 25</strong> — hover countries, click for national snapshot and top-five rating
+            tracks; open any club for full fixtures and weekly extremes.
+          </li>
+          <li>
+            <strong>Ratings</strong> in tables and charts are comparable across clubs that share the same European
+            run; they are descriptive, not betting advice.
+          </li>
+        </ul>
+        <p style={{ marginBottom: 0, marginTop: "12px" }}>
+          <a
+            className="link-btn link-btn--primary"
+            href="#/"
+            onClick={(e) => {
+              e.preventDefault();
+              navigate("/");
+            }}
+          >
+            ← Back to map & top 25
+          </a>
+        </p>
+      </div>
+
+      <ContactForm />
+    </>
+  );
+}
+
+function NarrativeParagraph({ text }) {
+  const parts = String(text).split(/\*\*/);
+  return (
+    <p className="small" style={{ marginBottom: "12px", lineHeight: 1.65 }}>
+      {parts.map((chunk, i) =>
+        i % 2 === 1 ? (
+          <strong key={i}>{chunk}</strong>
+        ) : (
+          <span key={i}>{chunk}</span>
+        )
+      )}
+    </p>
+  );
+}
+
 function App() {
   const [countries, setCountries] = useState([]);
   const [teams, setTeams] = useState([]);
@@ -276,6 +504,7 @@ function App() {
 
   const [teamSeries, setTeamSeries] = useState([]);
   const [countryTopSeries, setCountryTopSeries] = useState(null);
+  const [countryNarrative, setCountryNarrative] = useState(null);
   const [biggestMatches, setBiggestMatches] = useState({ upsets: [], swings: [] });
   const [topSnapshot, setTopSnapshot] = useState([]);
 
@@ -283,6 +512,7 @@ function App() {
   const [error, setError] = useState("");
 
   const [clubDetail, setClubDetail] = useState(null);
+  const [clubNarrative, setClubNarrative] = useState(null);
   const [clubLoading, setClubLoading] = useState(false);
   const [clubError, setClubError] = useState("");
 
@@ -290,9 +520,10 @@ function App() {
 
   const mapHostRef = React.useRef(null);
   const [mapDims, setMapDims] = useState(() => {
-    if (typeof window === "undefined") return { w: 1200, h: 680 };
+    if (typeof window === "undefined") return { w: 1200, h: 560 };
     const w = Math.min(Math.floor(window.innerWidth * 0.94), 1680);
-    const h = Math.round(Math.min(Math.max(w * 0.62, 460), 820));
+    const aspect = 2.15;
+    const h = Math.round(Math.min(Math.max(w / aspect, 340), 760));
     return { w, h };
   });
 
@@ -301,9 +532,10 @@ function App() {
     if (!el || typeof ResizeObserver === "undefined") return;
 
     const measure = () => {
-      const w = Math.floor(el.getBoundingClientRect().width);
-      if (w < 80) return;
-      const h = Math.round(Math.min(Math.max(w * 0.62, 460), 820));
+      const rect = el.getBoundingClientRect();
+      const w = Math.floor(rect.width);
+      const h = Math.floor(rect.height);
+      if (w < 80 || h < 80) return;
       setMapDims((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
     };
 
@@ -361,6 +593,7 @@ function App() {
     const parsed = parseHashRouteFromString(hash);
     if (parsed.page !== "country" || !parsed.country) {
       setCountryTopSeries(null);
+      setCountryNarrative(null);
       return;
     }
     const slug = parsed.country;
@@ -368,14 +601,20 @@ function App() {
 
     async function loadCountryTopFive() {
       try {
-        const [topPayload, countryTeams] = await Promise.all([
+        const [topPayload, countryTeams, narrativePayload] = await Promise.all([
           getJson(`/api/country/${slug}/top-timeseries`, { allow404: true }),
           getJson(`/api/teams?country=${slug}`),
+          getJson(`/api/country/${slug}/narrative`, { allow404: true }),
         ]);
         if (cancelled) return;
         const payload =
           topPayload && Array.isArray(topPayload.teams) ? topPayload : { teams: [] };
         setCountryTopSeries(payload);
+        setCountryNarrative(
+          narrativePayload && Array.isArray(narrativePayload.paragraphs)
+            ? narrativePayload
+            : null
+        );
         const topIds = payload.teams.map((t) => String(t.pid));
         const firstPick =
           topIds.find((id) => countryTeams.some((t) => String(t.pid) === id)) ||
@@ -403,6 +642,7 @@ function App() {
     const parsed = parseHashRouteFromString(hash);
     if (parsed.page !== "club" || !parsed.teamId) {
       setClubDetail(null);
+      setClubNarrative(null);
       setClubLoading(false);
       setClubError("");
       return;
@@ -410,13 +650,37 @@ function App() {
     let cancelled = false;
     setClubLoading(true);
     setClubDetail(null);
+    setClubNarrative(null);
     setClubError("");
     (async () => {
       try {
-        const data = await fetchClubDetailWithFallbacks(parsed.teamId, 240000);
-        if (!cancelled) {
-          setClubDetail(data);
+        const detailPromise = fetchClubDetailWithFallbacks(parsed.teamId, 240000);
+        const narrativePromise = getJson(`/api/team/${parsed.teamId}/narrative`, {
+          allow404: true,
+        });
+        const [detailOut, narrativeOut] = await Promise.allSettled([
+          detailPromise,
+          narrativePromise,
+        ]);
+
+        if (cancelled) return;
+
+        if (detailOut.status === "rejected") {
           setClubLoading(false);
+          setClubError(detailOut.reason?.message || "Failed to load club");
+          return;
+        }
+
+        setClubDetail(detailOut.value);
+        setClubLoading(false);
+
+        if (
+          narrativeOut.status === "fulfilled" &&
+          narrativeOut.value &&
+          Array.isArray(narrativeOut.value.paragraphs) &&
+          narrativeOut.value.paragraphs.length > 0
+        ) {
+          setClubNarrative(narrativeOut.value);
         }
       } catch (err) {
         if (!cancelled) {
@@ -559,8 +823,18 @@ function App() {
       zmax: maxHeat,
       marker: { line: { color: "#334155", width: 0.8 } },
       colorbar: {
-        title: { text: "Best team<br>rating", font: { color: THEME.muted, size: 12 } },
-        titleside: "right",
+        orientation: "h",
+        x: 0.5,
+        xanchor: "center",
+        y: -0.02,
+        yanchor: "top",
+        len: 0.62,
+        thickness: 14,
+        title: {
+          text: "Best team rating",
+          font: { color: THEME.muted, size: 12 },
+          side: "bottom",
+        },
         tickfont: { color: THEME.muted, size: 11 },
         bgcolor: "rgba(17,24,39,0.92)",
         bordercolor: "#334155",
@@ -608,10 +882,6 @@ function App() {
       autosize: false,
       width: mapDims.w,
       height: mapDims.h,
-      title: {
-              text: "Hover for summary, click country for full page",
-        font: { color: THEME.text, size: 15 },
-      },
       font: { color: THEME.text },
       paper_bgcolor: THEME.plotPaper,
       geo: {
@@ -623,20 +893,17 @@ function App() {
         countrycolor: THEME.geoBorder,
         showocean: true,
         oceancolor: THEME.geoOcean,
-        lataxis: { range: [34, 71] },
-        lonaxis: { range: [-12, 45] },
-        domain: { x: [0, 1], y: [0, 1] },
+        /* Tighter N–S than default scope → geographic aspect reads wider inside the plot (less “square”). */
+        lataxis: { range: [37, 62] },
+        lonaxis: { range: [-24, 46] },
+        domain: { x: [0.02, 0.98], y: [0.02, 0.88] },
       },
-      margin: { l: 4, r: 104, t: 48, b: 10 },
+      margin: { l: 4, r: 12, t: 12, b: 72 },
     }),
     [mapDims.w, mapDims.h]
   );
 
   const countryTopFivePlotLayout = {
-    title: {
-      text: "Current top 5 clubs — rating history",
-      font: { color: THEME.text },
-    },
     font: { color: THEME.text },
     paper_bgcolor: THEME.plotPaper,
     plot_bgcolor: THEME.plotGrid,
@@ -660,21 +927,17 @@ function App() {
       linecolor: "#334155",
     },
     yaxis: {
-      title: { text: "Glicko-2 Rating", font: { color: THEME.muted, size: 12 } },
+      title: { text: "Rating", font: { color: THEME.muted, size: 12 } },
       gridcolor: "#334155",
       zerolinecolor: "#334155",
       tickfont: { color: THEME.muted, size: 11 },
       color: THEME.muted,
       linecolor: "#334155",
     },
-    margin: { l: 50, r: 20, t: 56, b: 40 },
+    margin: { l: 50, r: 20, t: 24, b: 40 },
   };
 
   const teamPlotLayout = {
-    title: {
-      text: "Weekly Team Rating Movement",
-      font: { color: THEME.text },
-    },
     font: { color: THEME.text },
     paper_bgcolor: THEME.plotPaper,
     plot_bgcolor: THEME.plotGrid,
@@ -693,41 +956,41 @@ function App() {
       linecolor: "#334155",
     },
     yaxis: {
-      title: { text: "Glicko-2 Rating", font: { color: THEME.muted, size: 12 } },
+      title: { text: "Rating", font: { color: THEME.muted, size: 12 } },
       gridcolor: "#334155",
       zerolinecolor: "#334155",
       tickfont: { color: THEME.muted, size: 11 },
       color: THEME.muted,
       linecolor: "#334155",
     },
-    margin: { l: 50, r: 20, t: 50, b: 40 },
+    margin: { l: 50, r: 20, t: 20, b: 40 },
   };
 
   const teamTrendData = [
     {
       x: teamSeries.map((d) => d.week_date),
       y: teamSeries.map((d) => d.rating),
-      mode: "lines+markers",
+      mode: "lines",
       type: "scatter",
       name: selectedTeam ? selectedTeam.team_name : "Team",
-      line: { color: THEME.primaryBright, width: 2.5 },
+      line: { color: THEME.primaryBright, width: 1.35, dash: "dot" },
     },
   ];
 
   const countryTopFivePlotData = useMemo(() => {
     const teams = countryTopSeries?.teams;
     if (!teams || teams.length === 0) return [];
-    return teams.map((t, i) => ({
-      x: t.series.map((p) => p.week_date),
-      y: t.series.map((p) => p.rating),
-      mode: "lines",
-      type: "scatter",
-      name: t.team_name,
-      line: {
-        color: COUNTRY_TOP5_LINE_COLORS[i % COUNTRY_TOP5_LINE_COLORS.length],
-        width: 2,
-      },
-    }));
+    return teams.map((t, i) => {
+      const c = COUNTRY_TOP5_LINE_COLORS[i % COUNTRY_TOP5_LINE_COLORS.length];
+      return {
+        x: t.series.map((p) => p.week_date),
+        y: t.series.map((p) => p.rating),
+        mode: "lines",
+        type: "scatter",
+        name: t.team_name,
+        line: { color: c, width: 1.35, dash: "dot" },
+      };
+    });
   }, [countryTopSeries]);
 
   const countryPageSummary =
@@ -762,6 +1025,7 @@ function App() {
           </a>
           <nav className="site-nav" aria-label="Primary">
             <a
+              className="link-btn link-btn--header"
               href="#/"
               onClick={(e) => {
                 e.preventDefault();
@@ -770,16 +1034,31 @@ function App() {
             >
               Map & top 25
             </a>
+            <a
+              className="link-btn link-btn--header"
+              href="#/info"
+              onClick={(e) => {
+                e.preventDefault();
+                navigate("/info");
+              }}
+            >
+              Info
+            </a>
           </nav>
         </div>
       </header>
       <main id="main-content" className="container">
-      {error && route.page !== "club" && <div className="card error">{error}</div>}
+      {error && route.page !== "club" && route.page !== "info" && (
+        <div className="card error">{error}</div>
+      )}
 
-      {route.page === "club" ? (
+      {route.page === "info" ? (
+        <InfoPage navigate={navigate} />
+      ) : route.page === "club" ? (
         <>
           <nav className="page-nav" aria-label="Breadcrumb">
             <a
+              className="link-btn"
               href="#/"
               onClick={(e) => {
                 e.preventDefault();
@@ -789,18 +1068,16 @@ function App() {
               ← Map & rankings
             </a>
             {clubCountrySlug ? (
-              <>
-                {" · "}
-                <a
-                  href={`#/country/${encodeURIComponent(clubCountrySlug)}`}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    navigate(`/country/${encodeURIComponent(clubCountrySlug)}`);
-                  }}
-                >
-                  ← {formatCountryDisplay(clubCountrySlug)}
-                </a>
-              </>
+              <a
+                className="link-btn"
+                href={`#/country/${encodeURIComponent(clubCountrySlug)}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate(`/country/${encodeURIComponent(clubCountrySlug)}`);
+                }}
+              >
+                ← {formatCountryDisplay(clubCountrySlug)}
+              </a>
             ) : null}
           </nav>
 
@@ -832,6 +1109,7 @@ function App() {
             <div className="card error" style={{ whiteSpace: "pre-wrap" }}>
               {clubError}{" "}
               <a
+                className="link-btn"
                 href="#/"
                 onClick={(e) => {
                   e.preventDefault();
@@ -845,9 +1123,22 @@ function App() {
             <>
               <h1>{clubDetail.team_name}</h1>
               <p className="small">
-                {formatCountryDisplay(clubDetail.country_name)} · Full match history and strongest weekly
-                rating moves (Glicko-2 updates are applied per rating week, not always per match date).
+                {formatCountryDisplay(clubDetail.country_name)} · Full match history and the biggest single-match
+                rating swings (updates are applied per <strong>rating week</strong>, not always per match date).
               </p>
+
+              {clubNarrative && clubNarrative.paragraphs?.length ? (
+                <div className="card">
+                  <h2>Club narrative</h2>
+                  <p className="small" style={{ marginTop: "-8px", color: THEME.muted }}>
+                    Weekly domestic vs continental ladder ranks (same European universe as country narratives),
+                    rating trend and optional regime splits.
+                  </p>
+                  {clubNarrative.paragraphs.map((para, i) => (
+                    <NarrativeParagraph key={`club-nar-${i}`} text={para} />
+                  ))}
+                </div>
+              ) : null}
 
               <div className="card">
                 <h2>Rating over time</h2>
@@ -856,25 +1147,29 @@ function App() {
 
               <div className="club-extremes-grid">
                 <div className="card">
-                  <h2>Largest weekly gains</h2>
+                  <h2>Largest rating gains</h2>
                   <p className="small" style={{ marginTop: "-8px" }}>
-                    Weeks with the biggest positive rating_change in the model.
+                    Fixtures with the biggest positive rating change for this club (post-match rating shown).
                   </p>
                   <div className="table-scroll">
                     <table>
                       <thead>
                         <tr>
-                          <th>Week</th>
-                          <th>Week start</th>
+                          <th>Date</th>
+                          <th>Opposition</th>
+                          <th>Comp</th>
                           <th>Rating</th>
                           <th>Δ rating</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {(clubDetail.weekly_gains || []).map((row, i) => (
-                          <tr key={`gain-${row.week}-${i}`}>
-                            <td>{row.week}</td>
-                            <td>{row.week_date}</td>
+                        {(clubDetail.rating_gains || []).map((row, i) => (
+                          <tr key={`gain-${row.match_date}-${row.opponent_name}-${i}`}>
+                            <td>{row.match_date || "—"}</td>
+                            <td>{row.opponent_name}</td>
+                            <td>
+                              <CompetitionBadge code={row.competition} />
+                            </td>
                             <td>{Number(row.rating).toFixed(1)}</td>
                             <td className="numeric-pos">{formatSignedRating(row.rating_change)}</td>
                           </tr>
@@ -885,25 +1180,29 @@ function App() {
                 </div>
 
                 <div className="card">
-                  <h2>Largest weekly losses</h2>
+                  <h2>Largest rating losses</h2>
                   <p className="small" style={{ marginTop: "-8px" }}>
-                    Weeks with the most negative rating_change.
+                    Fixtures with the most negative rating change (post-match rating shown).
                   </p>
                   <div className="table-scroll">
                     <table>
                       <thead>
                         <tr>
-                          <th>Week</th>
-                          <th>Week start</th>
+                          <th>Date</th>
+                          <th>Opposition</th>
+                          <th>Comp</th>
                           <th>Rating</th>
                           <th>Δ rating</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {(clubDetail.weekly_losses || []).map((row, i) => (
-                          <tr key={`loss-${row.week}-${i}`}>
-                            <td>{row.week}</td>
-                            <td>{row.week_date}</td>
+                        {(clubDetail.rating_losses || []).map((row, i) => (
+                          <tr key={`loss-${row.match_date}-${row.opponent_name}-${i}`}>
+                            <td>{row.match_date || "—"}</td>
+                            <td>{row.opponent_name}</td>
+                            <td>
+                              <CompetitionBadge code={row.competition} />
+                            </td>
                             <td>{Number(row.rating).toFixed(1)}</td>
                             <td className="numeric-neg">{formatSignedRating(row.rating_change)}</td>
                           </tr>
@@ -968,6 +1267,7 @@ function App() {
         <>
           <nav className="page-nav" aria-label="Breadcrumb">
             <a
+              className="link-btn"
               href="#/"
               onClick={(e) => {
                 e.preventDefault();
@@ -984,6 +1284,7 @@ function App() {
             <div className="card error">
               Unknown country “{formatCountryDisplay(route.country)}”.{" "}
               <a
+                className="link-btn"
                 href="#/"
                 onClick={(e) => {
                   e.preventDefault();
@@ -1016,20 +1317,39 @@ function App() {
                 </div>
               )}
 
+              {countryNarrative && countryNarrative.paragraphs?.length ? (
+                <div className="card">
+                  <h2>Country narrative</h2>
+                  <p className="small" style={{ marginTop: "-8px", color: THEME.muted }}>
+                    Generated from weekly league aggregates (pandas / numpy), calendar wording (pendulum),
+                    continental ladder counts vs European-wide weekly ranks, change-points on the national
+                    average (ruptures PELT when installed), and templated copy (Jinja2).
+                  </p>
+                  {countryNarrative.paragraphs.map((para, i) => (
+                    <NarrativeParagraph key={`nar-${i}`} text={para} />
+                  ))}
+                </div>
+              ) : null}
+
               <div className="card controls">
                 <div>
                   <label>Team</label>
                   <select value={selectedTeamId} onChange={(e) => setSelectedTeamId(e.target.value)}>
-                    {filteredTeams.map((team) => (
-                      <option key={team.pid} value={team.pid}>
-                        {team.team_name}
-                      </option>
-                    ))}
+                    {filteredTeams.length === 0 ? (
+                      <option value="">No clubs match visibility rules for this country</option>
+                    ) : (
+                      filteredTeams.map((team) => (
+                        <option key={team.pid} value={team.pid}>
+                          {team.team_name}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
                 {selectedTeamId ? (
                   <div style={{ alignSelf: "end" }}>
                     <a
+                      className="link-btn link-btn--primary"
                       href={`#/club/${selectedTeamId}`}
                       onClick={(e) => {
                         e.preventDefault();
@@ -1062,7 +1382,7 @@ function App() {
       ) : (
         <>
           <header className="page-hero">
-            <p className="sub-head">Glicko-2 · European clubs</p>
+            <p className="sub-head">Ratings · European clubs</p>
             <h1>Ratings dashboard</h1>
             <p className="small">
               Hover countries for a snapshot; <strong>click</strong> to open detail. Rankings below stay in sync with the latest rating week.
@@ -1070,11 +1390,15 @@ function App() {
           </header>
 
           <section className="map-full-width" aria-label="European ratings map">
-            <div className="card">
-              <h2>European Ratings Map</h2>
-              <p className="small" style={{ marginTop: "-6px", marginBottom: "12px" }}>
-                Shading shows each nation&apos;s <strong>strongest</strong> club — deeper slate blues are weaker; brighter royal blues are stronger.
-              </p>
+            <div className="card map-card">
+              <div className="map-card-intro">
+                <h2>European Ratings Map</h2>
+                <p className="small" style={{ marginTop: 0, paddingBottom: "12px" }}>
+                  Shading shows each nation&apos;s <strong>strongest</strong> club — deeper slate blues are weaker;
+                  brighter royal blues are stronger. Hover for a snapshot; <strong>click</strong> a country to open its
+                  page.
+                </p>
+              </div>
               <div ref={mapHostRef} className="map-plot-host">
                 <Plot
                   data={mapData}
@@ -1093,7 +1417,7 @@ function App() {
                   }}
                 />
               </div>
-              <p className="small">
+              <p className="small map-card-status">
                 {hoveredCountrySummary
                   ? (() => {
                       const br = Number(hoveredCountrySummary.top_team_rating);
@@ -1114,7 +1438,8 @@ function App() {
           <div className="card">
             <h2>Current top 25</h2>
             <p className="small" style={{ marginTop: "-8px", marginBottom: "14px" }}>
-              Latest rating week. Rows are clickable — open a club&apos;s full history.
+              Latest rating week. Only clubs with more than five matches in each of 2024, 2025, and 2026 appear here
+              and on the map (see About). Rows are clickable — open a club&apos;s full history.
             </p>
             <div className="table-scroll">
             <table>

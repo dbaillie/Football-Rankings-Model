@@ -33,7 +33,11 @@ duckdb
 # =========================
 streamlit
 fastapi
+email-validator
 uvicorn
+jinja2
+pendulum
+ruptures  # needs a C compiler where wheels are missing; narrative falls back to numpy splits
 
 # =========================
 # Data ingestion / APIs

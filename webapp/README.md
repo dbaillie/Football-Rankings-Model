@@ -51,9 +51,30 @@ Then open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
 After pulling changes that add API routes, **stop uvicorn completely** (Ctrl+C so both reloader and worker exit) and start it again. If `--reload` misses a change, club endpoints can 404 while older routes still work—check [http://127.0.0.1:8000/openapi.json](http://127.0.0.1:8000/openapi.json) for **`/api/club/{team_id}`**.
 
+## Contact form (Info page)
+
+The **Contact me** form POSTs to `/api/contact` and sends mail over SMTP. Install deps including `email-validator` (`pip install -r requirements.txt`). Configure before use:
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `FOOTBALL_CONTACT_TO_EMAIL` | Yes | Your inbox — where submissions are delivered |
+| `FOOTBALL_SMTP_HOST` | Yes | SMTP server (e.g. Outlook/Gmail relay host) |
+| `FOOTBALL_SMTP_PORT` | No | Default `587` (STARTTLS). Use `465` with SSL — see below |
+| `FOOTBALL_SMTP_USER` | Yes | SMTP login username (often your email) |
+| `FOOTBALL_SMTP_PASSWORD` | Yes | SMTP password or app password |
+| `FOOTBALL_SMTP_FROM` | No | From address if different from `FOOTBALL_SMTP_USER` |
+| `FOOTBALL_SMTP_SSL` | No | Set to `1` for implicit TLS on port 465 (`SMTP_SSL`) |
+| `FOOTBALL_CONTACT_SUBJECT_PREFIX` | No | Email subject prefix (default `[Football rankings]`) |
+
+`GET /api/health` includes `contact_email`: `configured` or `not_configured`. `GET /api/contact/status` returns `{ "enabled": true/false }`.
+
+**Gmail / Google Workspace:** use an [App Password](https://support.google.com/accounts/answer/185833) on port 587 with STARTTLS (leave `FOOTBALL_SMTP_SSL` unset).
+
 ## API endpoints
 
 - `GET /api/health`
+- `GET /api/contact/status` — whether the contact form can send mail
+- `POST /api/contact` — JSON body `{ "name", "email", "message", "company" }` (`company` is a honeypot; leave empty)
 - `GET /api/countries`
 - `GET /api/country-summaries`
 - `GET /api/teams?country=england`

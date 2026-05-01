@@ -33,4 +33,7 @@ _SHORT_FORM_TO_CANONICAL: dict[str, str] = {
     "paris sg fc": "paris sg",
     "bayer 04 leverkusen": "leverkusen",
     "1 koln": "koln",
+    # Football-data / historic abbrev vs full club name (same team).
+    "nottm forest": "nottingham forest",
+    "nottingham forrest": "nottingham forest",
 }

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,53 @@ import pandas as pd
 OUTPUT_DIR = Path(__file__).resolve().parents[2] / "output" / "europe"
 ANALYTICAL_START_WEEK = 200531
 ANALYTICAL_START_DATE = pd.Timestamp("2005-07-01")
+
+# Clubs appear in map aggregates, top snapshot, country charts, and /api/teams only if they have strictly more than
+# this many dated matches in each listed calendar year (home or away counts once per fixture).
+CLUB_VISIBILITY_MIN_MATCHES_PER_YEAR = max(
+    0, int(os.environ.get("FOOTBALL_CLUB_VISIBILITY_MIN_MATCHES_PER_YEAR", "5"))
+)
+_CLUB_VISIBILITY_YEARS_RAW = os.environ.get("FOOTBALL_CLUB_VISIBILITY_YEARS", "2024,2025,2026")
+
+
+def club_visibility_calendar_years() -> tuple[int, ...]:
+    years: list[int] = []
+    for part in _CLUB_VISIBILITY_YEARS_RAW.split(","):
+        p = part.strip()
+        if p.isdigit():
+            yi = int(p)
+            if 1900 <= yi <= 2100:
+                years.append(yi)
+    return tuple(sorted(set(years))) if years else (2024, 2025, 2026)
+
+# Narratives: first N *chronological* rating weeks are skipped for ladder / rank logic (ties ~1500 dominate sorts).
+NARRATIVE_LADDER_DROP_FIRST_N_WEEKS = max(
+    0, int(os.environ.get("FOOTBALL_NARRATIVE_LADDER_DROP_FIRST_N_WEEKS", "52"))
+)
+
+
+def narrative_ladder_week_allowlist(weekly: pd.DataFrame) -> frozenset[int] | None:
+    """
+    Week ids to KEEP for ladder statistics. Returns None if no warmup trim is applied
+    (setting is 0 or not enough distinct weeks to drop).
+    """
+    if weekly.empty or "week" not in weekly.columns:
+        return None
+    if NARRATIVE_LADDER_DROP_FIRST_N_WEEKS <= 0:
+        return None
+    u = sorted(pd.unique(weekly["week"].astype(int)))
+    drop = NARRATIVE_LADDER_DROP_FIRST_N_WEEKS
+    if len(u) <= drop:
+        return None
+    return frozenset(u[drop:])
+
+
+def filter_weekly_for_narrative_ladder(weekly: pd.DataFrame) -> pd.DataFrame:
+    allow = narrative_ladder_week_allowlist(weekly)
+    if allow is None:
+        return weekly.copy()
+    out = weekly.loc[weekly["week"].isin(allow)].copy()
+    return out if not out.empty else weekly.copy()
 
 
 class _MtimeCsvCache:
@@ -115,11 +163,65 @@ def load_match_results() -> pd.DataFrame:
     return matches
 
 
+def visibility_eligible_team_ids() -> frozenset[int]:
+    """Team ids that pass the recent activity gate (see CLUB_VISIBILITY_*). Cached on match-results CSV mtime."""
+    match_csv = OUTPUT_DIR / "europe_match_results.csv"
+
+    def build() -> frozenset[int]:
+        return _compute_visibility_eligible_team_ids()
+
+    return _csv_cache.get("visibility_eligible_team_ids", [match_csv], build)
+
+
+def _compute_visibility_eligible_team_ids() -> frozenset[int]:
+    years = club_visibility_calendar_years()
+    floor = CLUB_VISIBILITY_MIN_MATCHES_PER_YEAR
+    m = load_match_results()
+    if m.empty or years == ():
+        return frozenset()
+    m = m.loc[m["match_date"].notna()].copy()
+    if m.empty:
+        return frozenset()
+    m["cal_year"] = m["match_date"].dt.year.astype(int)
+
+    home_counts = (
+        m.groupby(["home_team_id", "cal_year"])
+        .size()
+        .reset_index(name="n")
+        .rename(columns={"home_team_id": "pid"})
+    )
+    away_counts = (
+        m.groupby(["away_team_id", "cal_year"])
+        .size()
+        .reset_index(name="n")
+        .rename(columns={"away_team_id": "pid"})
+    )
+    counts = (
+        pd.concat([home_counts, away_counts], ignore_index=True)
+        .groupby(["pid", "cal_year"], as_index=False)["n"]
+        .sum()
+    )
+    pivot = counts.pivot_table(index="pid", columns="cal_year", values="n", fill_value=0)
+
+    eligible: list[int] = []
+    for pid in pivot.index.astype(int):
+        ok = True
+        for y in years:
+            n = float(pivot.loc[pid, y]) if y in pivot.columns else 0.0
+            if not (n > floor):
+                ok = False
+                break
+        if ok:
+            eligible.append(int(pid))
+    return frozenset(eligible)
+
+
 def warm_csv_caches() -> None:
     """Eager-load heavy CSV frames so the first `/api/club/...` call does not block for minutes."""
     load_teams()
     load_weekly_ratings()
     load_match_results()
+    visibility_eligible_team_ids()
 
 
 def list_countries() -> list[str]:
@@ -130,6 +232,8 @@ def list_countries() -> list[str]:
 
 def list_teams(country: str | None = None) -> list[dict[str, Any]]:
     teams = _strip_international(load_teams())
+    eligible = visibility_eligible_team_ids()
+    teams = teams[teams["pid"].isin(eligible)]
     if country:
         teams = teams[teams["country_name"].str.lower() == country.lower()]
     teams = teams.sort_values(["country_name", "team_name"])
@@ -170,6 +274,8 @@ def get_country_top_n_timeseries(country: str, n: int = 5) -> dict[str, Any]:
     cc = country.lower()
     country_data = weekly[weekly["country_name"].str.lower() == cc].copy()
     country_data = _strip_international(country_data)
+    eligible = visibility_eligible_team_ids()
+    country_data = country_data[country_data["pid"].isin(eligible)]
     if country_data.empty:
         return {"teams": []}
 
@@ -196,7 +302,7 @@ def get_country_top_n_timeseries(country: str, n: int = 5) -> dict[str, Any]:
 
 
 def get_team_club_detail(team_id: int, weekly_limit: int = 15) -> dict[str, Any] | None:
-    """Full club view: every match (team-centric rows) plus largest weekly rating gains and losses."""
+    """Full club view: every match (team-centric rows) plus largest per-match rating gains and losses."""
     tid = int(team_id)
     teams_df = load_teams()
     meta = teams_df.loc[teams_df["pid"].astype(int) == tid]
@@ -286,27 +392,36 @@ def get_team_club_detail(team_id: int, weekly_limit: int = 15) -> dict[str, Any]
         for row in stacked
     ]
 
-    weekly = load_weekly_ratings()
-    tw = weekly[weekly["pid"].astype(int) == tid].copy()
-    weekly_cols = ["week", "week_date", "rating", "rating_change", "rating_change_pct"]
-
-    if tw.empty:
-        weekly_gains: list[dict[str, Any]] = []
-        weekly_losses: list[dict[str, Any]] = []
-    else:
-        tw = tw.sort_values("week")
-        gains_df = tw.nlargest(weekly_limit, "rating_change")[weekly_cols]
-        losses_df = tw.nsmallest(weekly_limit, "rating_change")[weekly_cols]
-        weekly_gains = gains_df.to_dict(orient="records")
-        weekly_losses = losses_df.to_dict(orient="records")
+    extremes_df = pd.DataFrame(
+        {
+            "match_date": match_dates,
+            "opponent_name": opp_name.astype(str),
+            "competition": sub["competition"].astype(str).to_numpy(),
+            "rating": post_r.astype(float),
+            "rating_change": rating_delta.astype(float),
+        }
+    )
+    pos = extremes_df[extremes_df["rating_change"] > 0]
+    neg = extremes_df[extremes_df["rating_change"] < 0]
+    gain_cols = ["match_date", "opponent_name", "competition", "rating", "rating_change"]
+    rating_gains = (
+        pos.nlargest(weekly_limit, "rating_change")[gain_cols].to_dict(orient="records")
+        if not pos.empty
+        else []
+    )
+    rating_losses = (
+        neg.nsmallest(weekly_limit, "rating_change")[gain_cols].to_dict(orient="records")
+        if not neg.empty
+        else []
+    )
 
     return {
         "team_id": tid,
         "team_name": team_name,
         "country_name": country_name,
         "matches": match_rows,
-        "weekly_gains": weekly_gains,
-        "weekly_losses": weekly_losses,
+        "rating_gains": rating_gains,
+        "rating_losses": rating_losses,
     }
 
 
@@ -360,6 +475,8 @@ def get_latest_snapshot(top_n: int = 25) -> list[dict[str, Any]]:
     is_international_country = latest["country_name"].str.lower().eq("international")
     is_international_name = latest["team_name"].str.endswith(" International", na=False)
     latest = latest[~(is_international_country | is_international_name)]
+    eligible = visibility_eligible_team_ids()
+    latest = latest[latest["pid"].isin(eligible)]
     latest = latest.sort_values("rating", ascending=False).head(top_n)
     return latest[["pid", "team_name", "country_name", "rating", "rd", "week"]].to_dict(orient="records")
 
@@ -376,6 +493,14 @@ def get_country_summaries() -> list[dict[str, Any]]:
         latest_week = int(weekly["week"].max())
         latest = weekly[weekly["week"] == latest_week].copy()
 
+    if latest.empty:
+        return []
+
+    eligible = visibility_eligible_team_ids()
+    latest = latest[latest["pid"].isin(eligible)]
+    is_international_country = latest["country_name"].str.lower().eq("international")
+    is_international_name = latest["team_name"].str.endswith(" International", na=False)
+    latest = latest[~(is_international_country | is_international_name)]
     if latest.empty:
         return []
 

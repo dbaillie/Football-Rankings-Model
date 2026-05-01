@@ -32,6 +32,12 @@ if str(_REPO_ROOT) not in sys.path:
 from scripts.club_name_canonical import canonical_match_key
 from scripts.club_identity import norm_club_name
 
+# When several dim rows share the same canonical key, default is min(club_id). Override here so the
+# intended primary identity survives (e.g. full official name + UEFA id over legacy abbreviated id).
+CANONICAL_COLLISION_KEEP_CLUB_ID: dict[str, int] = {
+    "nottingham forest": 1350,
+}
+
 
 def norm_name(s: str) -> str:
     """Backward-compatible alias for resolve-stage lookups (same rules as ingest)."""
@@ -54,11 +60,16 @@ def from_canonical_key_collisions(dim: pd.DataFrame) -> dict[int, int]:
         key = canonical_match_key(norm_name(str(row["club_name"])))
         key_to_ids[key].append(int(row["club_id"]))
     out: dict[int, int] = {}
-    for ids in key_to_ids.values():
-        if len(ids) < 2:
+    for key, ids in key_to_ids.items():
+        unique_ids = sorted(set(ids))
+        if len(unique_ids) < 2:
             continue
-        canonical_id = min(ids)
-        for x in ids:
+        preferred = CANONICAL_COLLISION_KEEP_CLUB_ID.get(key)
+        if preferred is not None and preferred in unique_ids:
+            canonical_id = preferred
+        else:
+            canonical_id = min(unique_ids)
+        for x in unique_ids:
             if x != canonical_id:
                 out[x] = canonical_id
     return out

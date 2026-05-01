@@ -5,11 +5,16 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from pydantic import BaseModel, EmailStr, Field
+
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from .contact_email import contact_smtp_configured, send_contact_submission
+from .country_narrative import build_country_narrative
+from .team_narrative import build_team_narrative
 from .data_service import (
     OUTPUT_DIR,
     clear_data_caches,
@@ -128,7 +133,52 @@ def health() -> dict[str, str]:
         else "yes",
         "club_json_try_get": "/api/clubdata?team_id=498",
         "routing_probe": "/api/ping-club",
+        "contact_email": "configured" if contact_smtp_configured() else "not_configured",
     }
+
+
+class ContactBody(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    email: EmailStr
+    message: str = Field(..., min_length=1, max_length=8000)
+    company: str = Field(default="", max_length=400)
+
+
+@app.get("/api/contact/status")
+def contact_status() -> dict[str, bool]:
+    """Whether POST /api/contact can deliver mail (SMTP env vars set)."""
+    return {"enabled": contact_smtp_configured()}
+
+
+@app.post("/api/contact")
+async def contact_submit(body: ContactBody) -> dict[str, bool]:
+    """Submit Info-page contact form; delivers to FOOTBALL_CONTACT_TO_EMAIL via SMTP."""
+    if body.company.strip():
+        return {"ok": True}
+    if not contact_smtp_configured():
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Contact email is not configured. Set FOOTBALL_CONTACT_TO_EMAIL, FOOTBALL_SMTP_HOST, "
+                "FOOTBALL_SMTP_USER, and FOOTBALL_SMTP_PASSWORD (see webapp README)."
+            ),
+        )
+    loop = asyncio.get_running_loop()
+    try:
+        await loop.run_in_executor(
+            None,
+            lambda: send_contact_submission(
+                name=body.name.strip(),
+                reply_email=str(body.email),
+                message=body.message.strip(),
+            ),
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Could not send your message. Try again later.",
+        ) from None
+    return {"ok": True}
 
 
 @app.post("/api/reload")
@@ -180,6 +230,71 @@ def country_top_timeseries(
     payload = get_country_top_n_timeseries(country, n=n)
     if not payload.get("teams"):
         raise HTTPException(status_code=404, detail="Country not found in weekly ratings data.")
+    return payload
+
+
+def _parse_int_cutoffs(
+    raw: str | None, default: tuple[int, ...], lo: int, hi: int, max_n: int
+) -> tuple[int, ...]:
+    if raw is None or not str(raw).strip():
+        return default
+    out: list[int] = []
+    for part in str(raw).split(","):
+        p = part.strip()
+        if not p.isdigit():
+            continue
+        z = int(p)
+        if lo <= z <= hi:
+            out.append(z)
+    return tuple(sorted(set(out)))[:max_n] if out else default
+
+
+def _parse_continental_z(raw: str | None) -> tuple[int, ...]:
+    return _parse_int_cutoffs(raw, (25, 50, 100), 5, 500, 8)
+
+
+def _parse_domestic_z(raw: str | None) -> tuple[int, ...]:
+    return _parse_int_cutoffs(raw, (5, 10, 25), 1, 80, 8)
+
+
+@app.get("/api/country/{country}/narrative")
+def country_narrative(
+    country: str,
+    top_n: int = Query(default=5, ge=1, le=15),
+    continental_z: str | None = Query(
+        default=None,
+        description="Comma-separated continental ladder sizes (e.g. 25,50,100). Default 25,50,100.",
+    ),
+) -> dict:
+    payload = build_country_narrative(
+        country,
+        top_n=top_n,
+        continental_cutoffs=_parse_continental_z(continental_z),
+    )
+    if payload is None:
+        raise HTTPException(status_code=404, detail="Country not found in weekly ratings data.")
+    return payload
+
+
+@app.get("/api/team/{team_id}/narrative")
+def team_narrative(
+    team_id: int,
+    domestic_z: str | None = Query(
+        default=None,
+        description="Comma-separated domestic ladder sizes (e.g. 5,10,25). Default 5,10,25.",
+    ),
+    continental_z: str | None = Query(
+        default=None,
+        description="Comma-separated continental ladder sizes (e.g. 25,50,100). Default 25,50,100.",
+    ),
+) -> dict:
+    payload = build_team_narrative(
+        team_id,
+        domestic_cutoffs=_parse_domestic_z(domestic_z),
+        continental_cutoffs=_parse_continental_z(continental_z),
+    )
+    if payload is None:
+        raise HTTPException(status_code=404, detail="Team not found in weekly ratings data.")
     return payload
 
 
