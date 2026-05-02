@@ -1,2 +1,21 @@
-
 .databricks
+
+# --- Generated data (rebuild with scripts; do not commit) ---
+output/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+.env
+.env.local
+
+# --- Editor / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
