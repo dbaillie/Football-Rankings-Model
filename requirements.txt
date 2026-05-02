@@ -35,6 +35,7 @@ streamlit
 fastapi
 email-validator
 uvicorn
+python-dotenv
 jinja2
 pendulum
 ruptures  # needs a C compiler where wheels are missing; narrative falls back to numpy splits

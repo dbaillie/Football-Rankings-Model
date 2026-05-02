@@ -41,6 +41,8 @@ python scripts/ingest_euro_comps_from_config.py --provider football_data_org
 
 ## Run locally
 
+### Backend (always)
+
 From the repository root:
 
 ```bash
@@ -52,7 +54,38 @@ python run_server.py
 
 Wait until the terminal prints **`CSV preload complete`** (first boot can take 1–2 minutes while match results load). If you reload code often and want an instant listening socket, set `FOOTBALL_RANKINGS_SKIP_PRELOAD=1` (first club request may then hang while CSVs load).
 
-Then open [http://127.0.0.1:8000](http://127.0.0.1:8000).
+### Frontend options
+
+The dashboard UI is built with **Vite + React** under `webapp/frontend/` (recommended for parity with hosted deploys):
+
+1. **Production-style (FastAPI serves `dist/`):** Install Node/npm, then:
+
+   ```bash
+   cd webapp/frontend
+   npm install
+   npm run build
+   ```
+
+   Restart `python run_server.py` and open [http://127.0.0.1:8000](http://127.0.0.1:8000).
+
+2. **Vite dev + API on 8000:** In one terminal run `python run_server.py`. In another:
+
+   ```bash
+   cd webapp/frontend
+   npm install
+   npm run dev
+   ```
+
+   Open the URL Vite prints (port **5173**). `/api/*` is proxied to `127.0.0.1:8000` — no `VITE_API_BASE_URL` needed.
+
+3. **Legacy in-browser Babel (no npm):** If `webapp/frontend/dist/index.html` is absent, the API serves `index.legacy.html`, which loads React from CDNs and `/assets/app.jsx`. Use this only when you cannot run Node.
+
+### Environment
+
+- **Hosted SPA (Vercel):** set `VITE_API_BASE_URL` to your Render (or other) API origin, no trailing slash. See `webapp/frontend/.env.local.example`.
+- **API CORS:** after you know the Vercel URL, set `FOOTBALL_CORS_ORIGINS=https://your-site.vercel.app` (comma-separated). If unset, the API allows all origins (`*`).
+
+Then open [http://127.0.0.1:8000](http://127.0.0.1:8000) when using option (1) or (3).
 
 After pulling changes that add API routes, **stop uvicorn completely** (Ctrl+C so both reloader and worker exit) and start it again. If `--reload` misses a change, club endpoints can 404 while older routes still work—check [http://127.0.0.1:8000/openapi.json](http://127.0.0.1:8000/openapi.json) for **`/api/club/{team_id}`**.
 
@@ -77,6 +110,8 @@ The **Contact me** form POSTs to `/api/contact` and sends mail over SMTP. Instal
 
 ## API endpoints
 
+- `GET /health` — minimal `{ "status": "ok" }` (Render / uptime checks)
+- `GET /ratings` — latest-week snapshot rows (CSV-backed; query `top_n`, default 500)
 - `GET /api/health`
 - `GET /api/contact/status` — whether the contact form can send mail
 - `POST /api/contact` — JSON body `{ "name", "email", "message", "company" }` (`company` is a honeypot; leave empty)
@@ -89,3 +124,14 @@ The **Contact me** form POSTs to `/api/contact` and sends mail over SMTP. Instal
 - `GET /api/team/{team_id}/biggest-matches?limit=12`
 - `GET /api/club/{team_id}` — **canonical** club payload (all matches + weekly rating gains/losses)
 - `GET /api/team/{team_id}/club-detail` — same payload (back-compat alias)
+
+## Hosting (Render + Vercel)
+
+- **Data:** `output/europe/` is gitignored. The API reads CSVs from that path at runtime. You must ship those files to the host (upload step, persistent disk, artifact, etc.); an empty deploy will not serve real ratings.
+- **Backend (Render):** Use the repository root as the service root. Start command:
+
+  `uvicorn webapp.backend.main:app --host 0.0.0.0 --port $PORT`
+
+  Build must include `pip install -r requirements.txt` and a Vite build if you want FastAPI to serve the SPA from `webapp/frontend/dist/`. See `render.yaml` for a template.
+- **Frontend (Vercel):** Root directory `webapp/frontend`, framework Vite, build `npm run build`, output `dist`. Set `VITE_API_BASE_URL` to the public API origin (no trailing slash).
+- **CORS:** Set `FOOTBALL_CORS_ORIGINS` on Render to your Vercel URL after the first frontend deploy.

@@ -2,6 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import os
+
+try:
+    from dotenv import load_dotenv as _load_dotenv
+except ImportError:
+    def _load_dotenv() -> None:  # pragma: no cover
+        return None
+
+
+_load_dotenv()
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -33,6 +42,36 @@ from .data_service import (
 )
 
 FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend"
+DIST_DIR = FRONTEND_DIR / "dist"
+DIST_INDEX = DIST_DIR / "index.html"
+INDEX_LEGACY = FRONTEND_DIR / "index.legacy.html"
+
+
+def _cors_allow_origins() -> list[str]:
+    """Local dev hosts plus optional deployed origins via FOOTBALL_CORS_ORIGINS (comma-separated)."""
+    raw = (os.environ.get("FOOTBALL_CORS_ORIGINS") or "").strip()
+    base = (
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+    )
+    if raw == "*" or raw == "":
+        return ["*"]
+    origins = list(dict.fromkeys([*(p.rstrip("/") for p in base)]))
+    for part in raw.split(","):
+        p = part.strip().rstrip("/")
+        if p and p not in origins:
+            origins.append(p)
+    return origins
+
+
+def _spa_index_file() -> Path | None:
+    if DIST_INDEX.is_file():
+        return DIST_INDEX
+    if INDEX_LEGACY.is_file():
+        return INDEX_LEGACY
+    return None
 
 
 @asynccontextmanager
@@ -63,10 +102,12 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Football Rankings API", version="0.1.0", lifespan=lifespan)
 
+_origins = _cors_allow_origins()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_origins,
+    # Browsers disallow credentials with Access-Control-Allow-Origin: *
+    allow_credentials=_origins != ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -122,6 +163,25 @@ def team_identity(team_id: int) -> dict:
         "team_name": str(row.iloc[0]["team_name"]),
         "country_name": str(row.iloc[0]["country_name"]),
     }
+
+
+@app.get("/health")
+def health_minimal() -> dict[str, str]:
+    """Render / portfolio health probes (minimal JSON); see `/api/health` for richer diagnostics."""
+    return {"status": "ok"}
+
+
+@app.get("/ratings")
+def ratings_csv_public(
+    top_n: int = Query(default=500, ge=1, le=2000, description="Rows from latest rating week."),
+) -> list[dict]:
+    """Latest-week snapshot rows (subset of CSV-backed ratings). Same backing data as `/api/snapshot`."""
+    try:
+        return get_latest_snapshot(top_n=top_n)
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="Ratings data file not found") from None
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to load ratings data") from None
 
 
 @app.get("/api/health")
@@ -326,10 +386,17 @@ def biggest_matches(team_id: int, limit: int = Query(default=10, ge=1, le=50)) -
 
 @app.get("/")
 def index() -> FileResponse:
-    return FileResponse(
-        FRONTEND_DIR / "index.html",
-        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
-    )
+    spa = _spa_index_file()
+    if spa is None:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Frontend not built. Run "
+                "`cd webapp/frontend && npm install && npm run build` "
+                "or rely on webapp/frontend/index.legacy.html for Babel/React-CDN loading."
+            ),
+        )
+    return FileResponse(spa, headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
 
 
 def _frontend_static_headers(*, path: str) -> dict[str, str]:
@@ -351,8 +418,16 @@ class _DevStaticFiles(StaticFiles):
         return resp
 
 
-app.mount(
-    "/assets",
-    _DevStaticFiles(directory=FRONTEND_DIR.resolve(), html=False, check_dir=True),
-    name="assets",
-)
+_dist_assets = DIST_DIR / "assets"
+if _dist_assets.is_dir():
+    app.mount(
+        "/assets",
+        StaticFiles(directory=str(_dist_assets.resolve()), html=False),
+        name="assets",
+    )
+else:
+    app.mount(
+        "/assets",
+        _DevStaticFiles(directory=FRONTEND_DIR.resolve(), html=False, check_dir=True),
+        name="assets",
+    )

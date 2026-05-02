@@ -1,0 +1,24 @@
+# Render Blueprint — backend + built SPA served from FastAPI (optional).
+#
+# Prerequisites:
+# • This repo relies on CSV data under output/europe/ (gitignored locally). Attach data on the server
+#   (persisted disk upload, tarball in build step, artifact job, etc.) — an empty checkout will crash at runtime.
+#
+# Deploy as a Web Service with root = repository root. After first Vercel deploy, set
+# FOOTBALL_CORS_ORIGINS=https://your-app.vercel.app (comma-separated list). Leave unset during bring-up for "*".
+
+services:
+  - type: web
+    name: football-rankings-api
+    runtime: python
+    plan: free
+    rootDir: .
+    buildCommand: pip install -r requirements.txt && cd webapp/frontend && npm install && npm run build
+    startCommand: uvicorn webapp.backend.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: NODE_VERSION
+        value: "22.12.0"
+      # - key: FOOTBALL_CORS_ORIGINS
+      #   sync: false
+      # - key: FOOTBALL_RANKINGS_SKIP_PRELOAD
+      #   value: "0"
