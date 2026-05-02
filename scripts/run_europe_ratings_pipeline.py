@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Single CLI flow: domestic ingest → UEFA ingest → resolve club identities → Europe Glicko.
+Single CLI flow: domestic ingest → UEFA ingest → upcoming SofaScore fixtures (separate fact CSV)
+→ resolve club identities → Europe Glicko.
 
 Does not change ingest/resolve/Glicko logic; only invokes existing scripts in order.
 
@@ -8,6 +9,7 @@ Examples:
   python scripts/run_europe_ratings_pipeline.py
   python scripts/run_europe_ratings_pipeline.py --dry-run
   python scripts/run_europe_ratings_pipeline.py --skip-domestic --skip-euro
+  python scripts/run_europe_ratings_pipeline.py --skip-future-fixtures
   python scripts/run_europe_ratings_pipeline.py --reset-euro --skip-domestic
 """
 
@@ -86,6 +88,11 @@ def main() -> None:
         action="store_true",
         help="Before UEFA ingest, delete euro cache files (see scripts/reset_euro_ingest_artifacts.py)",
     )
+    parser.add_argument(
+        "--skip-future-fixtures",
+        action="store_true",
+        help="Skip ingest_future_fixtures.py (writes output/fact_fixture_upcoming.csv)",
+    )
     args = parser.parse_args()
 
     outdir = _repo_path(args.outdir)
@@ -141,6 +148,22 @@ def main() -> None:
                 str(dim_season),
                 "--provider",
                 args.euro_provider,
+            ],
+            cwd=REPO_ROOT,
+            dry_run=args.dry_run,
+        )
+
+    if not args.skip_future_fixtures:
+        _run(
+            [
+                py,
+                str(scripts_dir / "ingest_future_fixtures.py"),
+                "--outdir",
+                str(outdir),
+                "--dim-club",
+                str(dim_club),
+                "--dim-country",
+                str(dim_country),
             ],
             cwd=REPO_ROOT,
             dry_run=args.dry_run,
