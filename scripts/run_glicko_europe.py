@@ -29,6 +29,7 @@ from glicko_engine.outputs import state_to_ratings_df, snapshots_to_df
 from gcam.config import GCAMConfig
 from gcam.football import fact_table_to_weighted_matches
 from gcam.pipeline import build_gcam_diagnostics, run_posthoc_gcam
+from gcam.simple import GCAMSimplifiedConfig, run_simple_comparability
 
 # Analytical boundary:
 # Weeks before this are used as warm-up only (run-in) and are excluded from output files.
@@ -56,6 +57,17 @@ GCAM_MERGE_INTO_FINAL = (
     "n_distinct_opponents",
     "n_distinct_opponent_communities",
     "primary_community",
+)
+
+SIMPLE_MERGE_INTO_FINAL = (
+    "simple_cross_weight_sum",
+    "simple_heat_generated",
+    "simple_n_distinct_cross_opponents",
+    "simple_comparability",
+    "simple_mean_opp_pre_rating",
+    "simple_anchor_n_matches_used",
+    "simple_anchor_rating",
+    "simple_adjusted_rating",
 )
 
 
@@ -284,6 +296,31 @@ def _load_gcam_config_override(path_raw: str | None) -> tuple[GCAMConfig, dict]:
     return cfg, {"source": str(p), "unknown_keys_ignored": unknown}
 
 
+def _load_gcam_simple_override(path_raw: str | None) -> tuple[GCAMSimplifiedConfig, dict]:
+    """Optional JSON with GCAMSimplifiedConfig fields (``uefa_codes`` may be a list)."""
+    if not path_raw:
+        return GCAMSimplifiedConfig(), {}
+    p = Path(path_raw)
+    if not p.is_absolute():
+        p = (Path.cwd() / p).resolve()
+    if not p.exists():
+        raise FileNotFoundError(f"GCAM simplified config file not found: {p}")
+    payload = json.loads(p.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"GCAM simplified JSON must be an object: {p}")
+    if "best_simple_config" in payload and isinstance(payload["best_simple_config"], dict):
+        cfg_data = dict(payload["best_simple_config"])
+    else:
+        cfg_data = dict(payload)
+    valid_fields = set(GCAMSimplifiedConfig.__dataclass_fields__.keys())
+    cleaned = {k: v for k, v in cfg_data.items() if k in valid_fields}
+    unknown = sorted(set(cfg_data.keys()) - valid_fields)
+    if "uefa_codes" in cleaned and isinstance(cleaned["uefa_codes"], list):
+        cleaned["uefa_codes"] = frozenset(str(x).strip().upper() for x in cleaned["uefa_codes"])
+    cfg = GCAMSimplifiedConfig(**cleaned)
+    return cfg, {"source": str(p), "unknown_keys_ignored": unknown}
+
+
 def _parse_cli_args():
     p = argparse.ArgumentParser(description="Europe-wide Glicko-2 ratings from resolved fact table.")
     p.add_argument(
@@ -299,6 +336,15 @@ def _parse_cli_args():
         help=(
             "Optional GCAM override JSON. Can be direct GCAMConfig fields or an optimiser file "
             "containing best_gcam_config."
+        ),
+    )
+    p.add_argument(
+        "--gcam-simple-config",
+        type=str,
+        default=None,
+        help=(
+            "Optional GCAM simplified-layer JSON (cross-weight comparability; "
+            "best_simple_config wrapper supported)."
         ),
     )
     return p.parse_args()
@@ -443,6 +489,12 @@ def main():
             bad = gcam_meta.get("unknown_keys_ignored") or []
             if bad:
                 print(f"  GCAM override ignored unknown keys: {', '.join(bad)}")
+        simple_cfg, simple_meta = _load_gcam_simple_override(args.gcam_simple_config)
+        if simple_meta:
+            print(f"  GCAM simplified override loaded from: {simple_meta.get('source')}")
+            sb = simple_meta.get("unknown_keys_ignored") or []
+            if sb:
+                print(f"  GCAM simplified ignored unknown keys: {', '.join(sb)}")
         weighted_matches = fact_table_to_weighted_matches(fact_df, id_to_country_name, gcam_cfg)
         weekly_ratings, gcam_community_weekly = run_posthoc_gcam(
             weekly_ratings,
@@ -450,6 +502,13 @@ def main():
             gcam_cfg,
         )
         weekly_ratings["primary_community"] = weekly_ratings["primary_community"].fillna("")
+        print("\nApplying simplified cross-context comparability (simple_* columns)...")
+        weekly_ratings = run_simple_comparability(
+            weekly_ratings,
+            weighted_matches,
+            id_to_country_name,
+            simple_cfg,
+        )
         if not gcam_community_weekly.empty:
             gcam_community_weekly.to_csv(output_dir / "europe_gcam_community_weekly.csv", index=False)
         diag_payload = build_gcam_diagnostics(
@@ -461,7 +520,9 @@ def main():
                 json.dump(diag_payload, gf, indent=2)
 
         last_w = int(analytical_weeks[-1])
-        merge_cols = [c for c in GCAM_MERGE_INTO_FINAL if c in weekly_ratings.columns]
+        merge_cols = [
+            c for c in (*GCAM_MERGE_INTO_FINAL, *SIMPLE_MERGE_INTO_FINAL) if c in weekly_ratings.columns
+        ]
         if merge_cols:
             snap_gcam = weekly_ratings.loc[weekly_ratings["week"] == last_w, ["pid"] + merge_cols].drop_duplicates(
                 subset=["pid"]

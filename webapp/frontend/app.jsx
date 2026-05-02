@@ -30,6 +30,51 @@ const MAP_HEAT_COLORSCALE = [
   [1, "#93c5fd"],
 ];
 
+/** Weekly series: prefer simple adjusted column whenever any week has it; else GCAM adjusted; else raw Glicko. */
+function pickTeamStrengthSeriesKey(teamSeries) {
+  if (!teamSeries || teamSeries.length === 0) return "rating";
+  if (teamSeries.some((r) => r.simple_adjusted_rating != null)) return "simple_adjusted_rating";
+  if (teamSeries.some((r) => r.adjusted_rating != null)) return "adjusted_rating";
+  return "rating";
+}
+
+/** Glicko strength only (for “Raw” column). */
+function snapshotRawValue(row) {
+  const v = Number(row.rating);
+  return Number.isFinite(v) ? v : null;
+}
+
+/** Simple diffusion-adjusted strength only (“Info Diffused”). */
+function snapshotInfoDiffusedValue(row) {
+  if (row.simple_adjusted_rating == null) return null;
+  const v = Number(row.simple_adjusted_rating);
+  return Number.isFinite(v) ? v : null;
+}
+
+function formatSnapshotStrengthCell(value) {
+  if (value == null || Number.isNaN(value)) return "—";
+  return value.toFixed(1);
+}
+
+/**
+ * Comparator for sorting snapshot rows by raw or info-diffused numeric.
+ * Returns numeric compare (a − b); nulls sort after finite values for both ascending and descending sorts.
+ */
+function compareSnapshotNumeric(aNum, bNum) {
+  const aMiss = aNum === null || Number.isNaN(aNum);
+  const bMiss = bNum === null || Number.isNaN(bNum);
+  if (aMiss && bMiss) return 0;
+  if (aMiss) return 1;
+  if (bMiss) return -1;
+  return aNum - bNum;
+}
+
+function compareSnapshotRowsForSort(a, b, sortKey) {
+  const ra = sortKey === "raw" ? snapshotRawValue(a) : snapshotInfoDiffusedValue(a);
+  const rb = sortKey === "raw" ? snapshotRawValue(b) : snapshotInfoDiffusedValue(b);
+  return compareSnapshotNumeric(ra, rb);
+}
+
 function CompetitionBadge({ code }) {
   const raw = String(code ?? "").trim();
   const u = raw.toUpperCase();
@@ -452,13 +497,14 @@ function InfoPage({ navigate }) {
       </div>
 
       <div className="card">
-        <h2>Global evidence layer (GCAM)</h2>
+        <h2>Comparability strength (simple layer)</h2>
         <p className="small" style={{ marginBottom: 0 }}>
-          After Glicko-2, an extra <strong>GCAM</strong> step summarises how broadly each club&apos;s results connect
-          across leagues and competitions (<strong>connectivity</strong>), adds <strong>structural uncertainty</strong>{" "}
-          when evidence is mostly locally clustered, and computes a <strong>trust-adjusted strength</strong> curve.
-          Raw Glicko numbers stay in the dataset as the direct strength estimate; charts default to the adjusted curve
-          when present so rankings reflect both skill and <strong>global comparability of evidence</strong>.
+          After Glicko-2, a <strong>simplified comparability layer</strong> produces{" "}
+          <strong>simple adjusted strength</strong> from cross-context schedule exposure (and optional SOS-style anchors)
+          with one-sided shrink toward that anchor when raw ratings look hard to interpret globally.
+          Charts and the top table use this curve whenever it&apos;s present. Full <strong>GCAM</strong> (connectivity,
+          structural RD, trust) remains in exports for diagnostics; raw Glicko <strong>rating</strong> is always the base
+          estimate before those post-steps.
         </p>
       </div>
 
@@ -1071,6 +1117,8 @@ function App() {
   const [countryNarrative, setCountryNarrative] = useState(null);
   const [biggestMatches, setBiggestMatches] = useState({ upsets: [], swings: [] });
   const [topSnapshot, setTopSnapshot] = useState([]);
+  /** Top-25 client sort: `'info'` = simple-adjusted (“Info Diffused”), `'raw'` = Glicko rating. */
+  const [snapshotTableSort, setSnapshotTableSort] = useState({ key: "info", dir: "desc" });
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -1330,6 +1378,27 @@ function App() {
     return teams.filter((team) => team.country_name.toLowerCase() === slug.toLowerCase());
   }, [teams, selectedCountry, route.page, route.country]);
 
+  const sortedTopSnapshot = useMemo(() => {
+    if (!topSnapshot.length) return [];
+    const rows = topSnapshot.slice();
+    const tieBreak = (a, b) =>
+      String(a.team_name || "").localeCompare(String(b.team_name || ""), undefined, {
+        sensitivity: "base",
+      });
+    rows.sort((a, b) => {
+      const cmp = compareSnapshotRowsForSort(a, b, snapshotTableSort.key);
+      if (cmp !== 0) return snapshotTableSort.dir === "desc" ? -cmp : cmp;
+      return tieBreak(a, b);
+    });
+    return rows;
+  }, [topSnapshot, snapshotTableSort]);
+
+  const cycleSnapshotSort = React.useCallback((key) => {
+    setSnapshotTableSort((prev) =>
+      prev.key !== key ? { key, dir: "desc" } : { key, dir: prev.dir === "desc" ? "asc" : "desc" },
+    );
+  }, []);
+
   const summaryByCountry = useMemo(() => {
     const map = new Map();
     countrySummaries.forEach((item) => map.set(item.country_name.toLowerCase(), item));
@@ -1523,7 +1592,7 @@ function App() {
       linecolor: "#334155",
     },
     yaxis: {
-      title: { text: "Rating", font: { color: THEME.muted, size: 12 } },
+      title: { text: "Simple adjusted strength", font: { color: THEME.muted, size: 12 } },
       gridcolor: "#334155",
       zerolinecolor: "#334155",
       tickfont: { color: THEME.muted, size: 11 },
@@ -1533,8 +1602,7 @@ function App() {
     margin: { l: 50, r: 20, t: 24, b: 40 },
   };
 
-  const teamStrengthKey =
-    teamSeries.length && teamSeries[0].adjusted_rating != null ? "adjusted_rating" : "rating";
+  const teamStrengthKey = pickTeamStrengthSeriesKey(teamSeries);
 
   const teamPlotLayout = {
     font: { color: THEME.text },
@@ -1556,7 +1624,12 @@ function App() {
     },
     yaxis: {
       title: {
-        text: teamStrengthKey === "adjusted_rating" ? "Adjusted strength (GCAM)" : "Rating",
+        text:
+          teamStrengthKey === "simple_adjusted_rating"
+            ? "Simple adjusted strength"
+            : teamStrengthKey === "adjusted_rating"
+              ? "Adjusted strength (GCAM)"
+              : "Rating",
         font: { color: THEME.muted, size: 12 },
       },
       gridcolor: "#334155",
@@ -2049,7 +2122,9 @@ function App() {
             <h2>Current top 25</h2>
             <p className="small" style={{ marginTop: "-8px", marginBottom: "14px" }}>
               Latest rating week. Only clubs with more than five matches in each of 2024, 2025, and 2026 appear here
-              and on the map (see About). Rows are clickable — open a club&apos;s full history.
+              and on the map (see About). Rows are clickable — open a club&apos;s full history. Click{" "}
+              <strong>Raw</strong> or <strong>Info Diffused</strong> to sort; default matches server order by Info
+              Diffused.
             </p>
             <div className="table-scroll">
             <table>
@@ -2058,12 +2133,65 @@ function App() {
                   <th>#</th>
                   <th>Team</th>
                   <th>Country</th>
-                  <th>{topSnapshot.some((r) => r.adjusted_rating != null) ? "Strength (adj.)" : "Rating"}</th>
+                  <th
+                    scope="col"
+                    aria-sort={
+                      snapshotTableSort.key === "info"
+                        ? snapshotTableSort.dir === "desc"
+                          ? "descending"
+                          : "ascending"
+                        : undefined
+                    }
+                  >
+                    <button
+                      type="button"
+                      className="th-sort-btn"
+                      title="Sort by diffusion-adjusted strength"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        cycleSnapshotSort("info");
+                      }}
+                    >
+                      Info Diffused
+                      {snapshotTableSort.key === "info" ? (
+                        <span className="th-sort-indicator" aria-hidden>
+                          {snapshotTableSort.dir === "desc" ? "▼" : "▲"}
+                        </span>
+                      ) : null}
+                    </button>
+                  </th>
+                  <th
+                    scope="col"
+                    aria-sort={
+                      snapshotTableSort.key === "raw"
+                        ? snapshotTableSort.dir === "desc"
+                          ? "descending"
+                          : "ascending"
+                        : undefined
+                    }
+                  >
+                    <button
+                      type="button"
+                      className="th-sort-btn"
+                      title="Sort by raw Glicko rating"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        cycleSnapshotSort("raw");
+                      }}
+                    >
+                      Raw
+                      {snapshotTableSort.key === "raw" ? (
+                        <span className="th-sort-indicator" aria-hidden>
+                          {snapshotTableSort.dir === "desc" ? "▼" : "▲"}
+                        </span>
+                      ) : null}
+                    </button>
+                  </th>
                   <th>{topSnapshot.some((r) => r.total_rd != null) ? "RD (total)" : "RD"}</th>
                 </tr>
               </thead>
               <tbody>
-                {topSnapshot.map((row, idx) => (
+                {sortedTopSnapshot.map((row, idx) => (
                   <tr
                     key={row.pid}
                     className="click-row"
@@ -2084,8 +2212,9 @@ function App() {
                     <td>{row.team_name}</td>
                     <td>{formatCountryDisplay(row.country_name)}</td>
                     <td className="rating-strong">
-                      {(row.adjusted_rating != null ? Number(row.adjusted_rating) : Number(row.rating)).toFixed(1)}
+                      {formatSnapshotStrengthCell(snapshotInfoDiffusedValue(row))}
                     </td>
+                    <td>{formatSnapshotStrengthCell(snapshotRawValue(row))}</td>
                     <td>{(row.total_rd != null ? Number(row.total_rd) : Number(row.rd)).toFixed(1)}</td>
                   </tr>
                 ))}

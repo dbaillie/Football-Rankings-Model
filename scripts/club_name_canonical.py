@@ -36,4 +36,8 @@ _SHORT_FORM_TO_CANONICAL: dict[str, str] = {
     # Football-data / historic abbrev vs full club name (same team).
     "nottm forest": "nottingham forest",
     "nottingham forrest": "nottingham forest",
+    # UEFA "Olympiacos FC" vs domestic "Olympiakos" (alternate spelling).
+    "olympiacos": "olympiakos",
+    # Sofascore/UEFA vs Greek domestic naming.
+    "pae olympiakos sfp": "olympiakos",
 }

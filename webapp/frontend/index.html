@@ -471,6 +471,36 @@
         box-shadow: 0 1px 0 var(--border);
       }
 
+      .th-sort-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin: 0;
+        padding: 0;
+        border: none;
+        background: none;
+        font: inherit;
+        font-weight: 600;
+        color: inherit;
+        cursor: pointer;
+        text-align: left;
+      }
+
+      .th-sort-btn:hover {
+        color: var(--primary-bright);
+      }
+
+      .th-sort-btn:focus-visible {
+        outline: 2px solid var(--primary-bright);
+        outline-offset: 2px;
+        border-radius: 4px;
+      }
+
+      .th-sort-indicator {
+        font-size: 0.7rem;
+        opacity: 0.55;
+      }
+
       .club-extremes-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -677,6 +707,7 @@
   <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
     <div id="root"></div>
-    <script type="text/babel" src="/assets/app.jsx?v=20260502caloverlay"></script>
+    <!-- Bump ?v= when app.jsx behavior changes — browsers aggressively cache script URLs otherwise. -->
+    <script type="text/babel" src="/assets/app.jsx?v=20260502dual-top25"></script>
   </body>
 </html>

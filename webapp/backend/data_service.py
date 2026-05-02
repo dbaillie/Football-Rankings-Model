@@ -38,20 +38,22 @@ NARRATIVE_LADDER_DROP_FIRST_N_WEEKS = max(
 
 
 def ladder_sort_column(weekly: pd.DataFrame) -> str:
-    """Column to rank clubs by when GCAM outputs are present (power score > adjusted > raw Glicko)."""
+    """Rank column: simple adjusted strength > GCAM adjusted > raw Glicko."""
     if weekly.empty:
         return "rating"
-    if "power_score" in weekly.columns and weekly["power_score"].notna().any():
-        return "power_score"
+    if "simple_adjusted_rating" in weekly.columns:
+        return "simple_adjusted_rating"
     if "adjusted_rating" in weekly.columns and weekly["adjusted_rating"].notna().any():
         return "adjusted_rating"
     return "rating"
 
 
 def strength_chart_column(weekly: pd.DataFrame) -> str:
-    """Time-series strength curve: adjusted rating when calibrated, else raw Glicko."""
+    """Time-series strength: simple adjusted when present, else GCAM adjusted, else raw Glicko."""
     if weekly.empty:
         return "rating"
+    if "simple_adjusted_rating" in weekly.columns:
+        return "simple_adjusted_rating"
     if "adjusted_rating" in weekly.columns and weekly["adjusted_rating"].notna().any():
         return "adjusted_rating"
     return "rating"
@@ -267,6 +269,12 @@ def get_team_timeseries(team_id: int) -> list[dict[str, Any]]:
         return []
     columns = ["week", "week_date", "rating", "rd", "sigma", "rating_change", "rating_change_pct"]
     for extra in (
+        "simple_adjusted_rating",
+        "simple_anchor_rating",
+        "simple_comparability",
+        "simple_heat_generated",
+        "simple_cross_weight_sum",
+        "simple_n_distinct_cross_opponents",
         "adjusted_rating",
         "total_rd",
         "structural_rd",
@@ -515,7 +523,22 @@ def get_latest_snapshot(top_n: int = 25) -> list[dict[str, Any]]:
     rank_col = ladder_sort_column(latest)
     latest = latest.sort_values(rank_col, ascending=False).head(top_n)
     base_cols = ["pid", "team_name", "country_name", "rating", "rd", "week"]
-    extra = [c for c in ("adjusted_rating", "total_rd", "trust_factor", "effective_connectivity", "power_score") if c in latest.columns]
+    extra = [
+        c
+        for c in (
+            "simple_adjusted_rating",
+            "simple_comparability",
+            "simple_heat_generated",
+            "simple_cross_weight_sum",
+            "simple_n_distinct_cross_opponents",
+            "adjusted_rating",
+            "total_rd",
+            "trust_factor",
+            "effective_connectivity",
+            "power_score",
+        )
+        if c in latest.columns
+    ]
     return latest[base_cols + extra].to_dict(orient="records")
 
 

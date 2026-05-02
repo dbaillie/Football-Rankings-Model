@@ -326,7 +326,33 @@ def biggest_matches(team_id: int, limit: int = Query(default=10, ge=1, le=50)) -
 
 @app.get("/")
 def index() -> FileResponse:
-    return FileResponse(FRONTEND_DIR / "index.html")
+    return FileResponse(
+        FRONTEND_DIR / "index.html",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
 
 
-app.mount("/assets", StaticFiles(directory=FRONTEND_DIR), name="assets")
+def _frontend_static_headers(*, path: str) -> dict[str, str]:
+    """Dev-friendly: JSX/CSS change often — avoid stale UMD bundles when ?v= is forgotten."""
+    suf = Path(path).suffix.lower()
+    if suf in {".jsx", ".js", ".html", ".css"}:
+        return {"Cache-Control": "no-store, max-age=0"}
+    return {}
+
+
+class _DevStaticFiles(StaticFiles):
+    def __init__(self, directory: Path, **kw: object) -> None:
+        super().__init__(directory=str(directory.resolve()), **kw)
+
+    async def get_response(self, path: str, scope: dict) -> object:
+        resp = await super().get_response(path, scope)
+        for k, v in _frontend_static_headers(path=path).items():
+            resp.headers[k] = v
+        return resp
+
+
+app.mount(
+    "/assets",
+    _DevStaticFiles(directory=FRONTEND_DIR.resolve(), html=False, check_dir=True),
+    name="assets",
+)
