@@ -3,6 +3,10 @@ Europe-wide Glicko-2 rating system using continental data.
 
 Usage: python scripts/run_glicko_europe.py [--output-root DIR]
 
+Optional post-step — empirical prediction calibration (bins by pre-match rating difference):
+
+  python scripts/analyse_europe_calibration.py [--output-root DIR]
+
 This script:
 1. Loads processed data from fact_result_simple_resolved.csv
 2. Uses global club IDs for cross-country matches

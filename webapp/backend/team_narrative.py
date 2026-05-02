@@ -146,16 +146,8 @@ def build_team_narrative(
 
     country_display = _title_place(country_raw)
 
-    dom_prefix = (
-        "Across ladder weeks (initial tied/default weeks excluded): "
-        if ladder_applied
-        else "Across rated weeks: "
-    )
-    eu_prefix = (
-        "Continental ladder weeks (warmup excluded): "
-        if ladder_applied
-        else "Continental footprint: "
-    )
+    dom_prefix = "Domestically, "
+    eu_prefix = "Across Europe, "
 
     ctx: dict[str, Any] = {
         "team_name": team_name,
@@ -218,12 +210,10 @@ def build_team_narrative(
     }
 
 
-_TEAM_NARRATIVE_TEMPLATE = """**{{ team_name }}** ({{ country_display }}) appears in **{{ n_weeks_fmt }}** weekly rating rows from **{{ first_month }}** through **{{ latest_month }}**. The latest rating is **{{ latest_rating }}** versus **{{ hist_mean_rating }}** averaged across those weeks (**{{ above_hist_fmt }}** vs that club-level mean). Week-to-week rating noise has standard deviation **{{ volatility }}** points; a crude linear trend **{{ trend_word }}** at about **{{ slope_per_year }}** points per year.
+_TEAM_NARRATIVE_TEMPLATE = """**{{ team_name }}** ({{ country_display }}) appears in **{{ n_weeks_fmt }}** weekly rating rows from **{{ first_month }}** through **{{ latest_month }}**. The latest rating is **{{ latest_rating }}** versus **{{ hist_mean_rating }}** averaged across those weeks (**{{ above_hist_fmt }}** vs that club-level mean). Week-to-week rating noise has standard deviation **{{ volatility }}** points; a linear trend **{{ trend_word }}** at about **{{ slope_per_year }}** points per year.
 
 **Domestic ladder** (within {{ country_display }} only each week; rank **1** is strongest): mean weekly slot **{{ mean_dom_rank_fmt }}**, **{{ latest_dom_rank }}** in the latest row, best weekly slot **{{ best_dom_rank }}**. {{ domestic_share_sentence }}
 
 **Continental ladder** (every European club in the dataset ranked each week): mean rank **{{ mean_eu_rank_fmt }}**, **{{ latest_eu_rank }}** latest, best-ever weekly rank **{{ best_eu_rank }}**. {{ continental_share_sentence }}
 
-{% if has_regimes %}Rating **change-point** segmentation (same tooling as country narratives) suggests **{{ n_regimes }}** broad eras for this club; typical step changes between adjacent segment means are ~**{{ regime_jump }}** points — illustrative only.{% endif %}
-
-{% if ladder_applied %}Summaries that involve **mean**, **best-ever**, or **share-in-top-X** ladder counts exclude the first **{{ ladder_weeks_dropped }}** chronological rating weeks (mass ties); **latest** ranks always reflect the most recent week in the full dataset.{% endif %}"""
+{% if has_regimes %}The rating trajectory splits into **{{ n_regimes }}** broad segments with typical steps around **{{ regime_jump }}** points between segment averages.{% endif %}"""

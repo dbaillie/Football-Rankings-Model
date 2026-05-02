@@ -1,4 +1,4 @@
-const { useEffect, useMemo, useState } = React;
+const { useEffect, useLayoutEffect, useMemo, useState } = React;
 
 /** Matches dark theme tokens in index.html */
 const THEME = {
@@ -242,6 +242,9 @@ function parseHashRouteFromString(hash) {
   if (segments[0] === "info") {
     return { page: "info" };
   }
+  if (segments[0] === "calibration") {
+    return { page: "calibration" };
+  }
   return { page: "home" };
 }
 
@@ -459,6 +462,22 @@ function InfoPage({ navigate }) {
             <strong>Ratings</strong> in tables and charts are comparable across clubs that share the same European
             run; they are descriptive, not betting advice.
           </li>
+          <li>
+            <strong>
+              <a
+                href="#/calibration"
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate("/calibration");
+                }}
+              >
+                Calibration
+              </a>
+            </strong>{" "}
+            — empirical fit of predictions vs results (run{" "}
+            <code>scripts/analyse_europe_calibration.py</code> after Glicko; optional{" "}
+            <code>--last-weeks N</code> for the last N distinct rating weeks only).
+          </li>
         </ul>
         <p style={{ marginBottom: 0, marginTop: "12px" }}>
           <a
@@ -471,6 +490,53 @@ function InfoPage({ navigate }) {
           >
             ← Back to map & top 25
           </a>
+        </p>
+      </div>
+
+      <div className="card">
+        <h2>Country & club narratives</h2>
+        <p className="small" style={{ marginBottom: "12px" }}>
+          The prose blocks on country and club pages are <strong>generated automatically</strong> from the weekly
+          rating CSVs (not hand-written). Highlights use the same visibility rules as the map and lists (recent
+          activity per calendar year).
+        </p>
+        <ul className="small info-list" style={{ marginBottom: "12px" }}>
+          <li>
+            <strong>Templates</strong> — copy is rendered with{" "}
+            <a href="https://jinja.palletsprojects.com/" target="_blank" rel="noreferrer">
+              Jinja2
+            </a>
+            ; dates in narrative wording use{" "}
+            <a href="https://pendulum.eustace.io/" target="_blank" rel="noreferrer">
+              Pendulum
+            </a>
+            .
+          </li>
+          <li>
+            <strong>Warm-up weeks</strong> — some ladder-style summaries (continental counts, domestic/European rank
+            shares on club pages) ignore the first N chronological rating weeks so early mass ties near the default
+            rating do not dominate rankings. The setting is{" "}
+            <code>FOOTBALL_NARRATIVE_LADDER_DROP_FIRST_N_WEEKS</code> (default 52). Latest-week ranks on club pages
+            still use the full series.
+          </li>
+          <li>
+            <strong>Change-point segments</strong> — optional splits on average rating through time use{" "}
+            <code>ruptures</code> (PELT, <code>l2</code> model) when that library is installed; otherwise a greedy
+            split that minimizes within-segment squared error. Both are coarse summaries only.
+          </li>
+          <li>
+            <strong>Country club highlights</strong> — examples: largest step from the previous rating week to the
+            latest, highest peak rating, highest mean rating across weeks, and most weeks spent as the country&apos;s
+            top-rated club that week. Tie-breaking uses rating then club name order where needed.
+          </li>
+          <li>
+            <strong>Bold phrases</strong> in narratives are delimiter-based (<code>**like this**</code>), not raw
+            HTML.
+          </li>
+        </ul>
+        <p className="small" style={{ marginBottom: 0 }}>
+          Each narrative API response also includes a <code>facts</code> object (counts, segment lengths, backend
+          labels) for debugging or future UI — not shown on the page today.
         </p>
       </div>
 
@@ -491,6 +557,493 @@ function NarrativeParagraph({ text }) {
         )
       )}
     </p>
+  );
+}
+
+function CalibrationPage({ navigate, data, loading, error }) {
+  const bins = data?.bins && Array.isArray(data.bins) ? data.bins : [];
+  const gm = data?.global_metrics || {};
+  const counts = data?.counts || {};
+
+  const xSliderMax = useMemo(() => {
+    if (!bins.length) return 1500;
+    const mids = bins.map((b) => Math.abs(Number(b.rating_diff_mid) || 0));
+    const m = Math.max(...mids, 0);
+    return Math.min(2500, Math.max(500, Math.ceil((m + 100) / 25) * 25));
+  }, [bins]);
+
+  const [xAxisHalfSpan, setXAxisHalfSpan] = useState(500);
+  const [overlayHomeWinOnMain, setOverlayHomeWinOnMain] = useState(true);
+
+  useEffect(() => {
+    setXAxisHalfSpan((prev) => Math.min(Math.max(prev, 50), xSliderMax));
+  }, [xSliderMax]);
+
+  const calibrationPlots = useMemo(() => {
+    if (!bins.length) return { mainData: [], mainLayout: {}, rateData: [], rateLayout: {} };
+
+    const x = bins.map((b) => b.rating_diff_mid);
+    const customdata = bins.map((b) => [
+      b.rating_diff_low,
+      b.rating_diff_high,
+      b.n,
+      b.low_n ? "yes" : "no",
+      b.mean_rating_diff,
+    ]);
+
+    const mutedAxis = {
+      gridcolor: THEME.plotGrid,
+      zerolinecolor: THEME.plotGrid,
+      tickfont: { color: THEME.muted, size: 11 },
+      color: THEME.muted,
+      linecolor: THEME.plotGrid,
+    };
+
+    const baseMargin = { l: 54, r: 54, t: 28, b: 48 };
+
+    const mainData = [
+      {
+        x,
+        y: bins.map((b) => b.mean_actual_score),
+        customdata,
+        name: "Mean realised score",
+        mode: "lines+markers",
+        type: "scatter",
+        line: { color: THEME.accent, width: 2 },
+        marker: {
+          size: bins.map((b) => (b.low_n ? 6 : 9)),
+          color: bins.map((b) => (b.low_n ? "rgba(214,168,79,0.45)" : THEME.accent)),
+          line: { width: 0 },
+        },
+        hovertemplate:
+          "Rating diff (mid): %{x:.0f}<br>" +
+          "Realised mean score: %{y:.3f}<br>" +
+          "Bin [%{customdata[0]:.0f}, %{customdata[1]:.0f}), n=%{customdata[2]}, sparse bin: %{customdata[3]}<br>" +
+          "Mean diff in bin: %{customdata[4]:.1f}<extra></extra>",
+      },
+      {
+        x,
+        y: bins.map((b) => b.mean_pred_pA),
+        customdata,
+        name: "Mean Glicko pred.",
+        mode: "lines+markers",
+        type: "scatter",
+        line: { color: THEME.primaryBright, width: 2 },
+        marker: {
+          size: bins.map((b) => (b.low_n ? 6 : 9)),
+          color: bins.map((b) => (b.low_n ? "rgba(96,165,250,0.45)" : THEME.primaryBright)),
+          line: { width: 0 },
+        },
+        hovertemplate:
+          "Rating diff (mid): %{x:.0f}<br>" +
+          "Mean pred.: %{y:.3f}<br>" +
+          "Bin [%{customdata[0]:.0f}, %{customdata[1]:.0f}), n=%{customdata[2]}<extra></extra>",
+      },
+      {
+        x,
+        y: bins.map((b) => b.mean_elo_expected_home),
+        customdata,
+        name: "Elo-400 baseline",
+        mode: "lines+markers",
+        type: "scatter",
+        line: { color: THEME.muted, width: 1.5, dash: "dot" },
+        marker: {
+          size: bins.map((b) => (b.low_n ? 5 : 7)),
+          color: THEME.muted,
+          line: { width: 0 },
+        },
+        hovertemplate:
+          "Rating diff (mid): %{x:.0f}<br>" +
+          "Elo expectation: %{y:.3f}<br>" +
+          "Bin [%{customdata[0]:.0f}, %{customdata[1]:.0f}), n=%{customdata[2]}<extra></extra>",
+      },
+    ];
+
+    if (overlayHomeWinOnMain) {
+      mainData.push({
+        x,
+        y: bins.map((b) => b.empirical_p_home_win),
+        customdata,
+        name: "Empirical P(home win)",
+        mode: "lines+markers",
+        type: "scatter",
+        line: { color: "#C084FC", width: 2, dash: "longdash" },
+        marker: {
+          size: bins.map((b) => (b.low_n ? 5 : 8)),
+          color: bins.map((b) => (b.low_n ? "rgba(192,132,252,0.45)" : "#C084FC")),
+          symbol: "diamond",
+          line: { width: 0 },
+        },
+        hovertemplate:
+          "Rating diff (mid): %{x:.0f}<br>" +
+          "Empirical P(home win): %{y:.3f}<br>" +
+          "Bin [%{customdata[0]:.0f}, %{customdata[1]:.0f}), n=%{customdata[2]}<extra></extra>",
+      });
+    }
+
+    const mainLayout = {
+      font: { color: THEME.text },
+      paper_bgcolor: THEME.plotPaper,
+      plot_bgcolor: THEME.plotPaper,
+      margin: baseMargin,
+      showlegend: true,
+      legend: {
+        orientation: "h",
+        yanchor: "bottom",
+        y: 1.02,
+        x: 0,
+        font: { color: THEME.muted, size: 11 },
+        bgcolor: "rgba(17,24,39,0.75)",
+        bordercolor: "#334155",
+        borderwidth: 1,
+      },
+      xaxis: {
+        ...mutedAxis,
+        title: { text: "Pre-match rating diff (home − away)", font: { color: THEME.muted, size: 12 } },
+        range: [-xAxisHalfSpan, xAxisHalfSpan],
+      },
+      yaxis: {
+        ...mutedAxis,
+        title: {
+          text: overlayHomeWinOnMain ? "Score / expectation / P(home)" : "Score / expectation",
+          font: { color: THEME.muted, size: 12 },
+        },
+        range: [-0.05, 1.05],
+      },
+    };
+
+    const rateData = [
+      {
+        x,
+        y: bins.map((b) => b.empirical_p_home_win),
+        customdata,
+        name: "Empirical P(home win)",
+        mode: "lines+markers",
+        type: "scatter",
+        line: { color: "#A78BFA", width: 2 },
+        marker: { size: bins.map((b) => (b.low_n ? 6 : 9)), color: "#A78BFA" },
+        hovertemplate:
+          "Rating diff (mid): %{x:.0f}<br>" +
+          "P(home win): %{y:.3f}<br>" +
+          "n=%{customdata[2]}<extra></extra>",
+      },
+      {
+        x,
+        y: bins.map((b) => b.empirical_p_draw),
+        customdata,
+        name: "Empirical P(draw)",
+        mode: "lines+markers",
+        type: "scatter",
+        line: { color: "#2DD4BF", width: 2 },
+        marker: { size: bins.map((b) => (b.low_n ? 6 : 9)), color: "#2DD4BF" },
+        hovertemplate:
+          "Rating diff (mid): %{x:.0f}<br>" +
+          "P(draw): %{y:.3f}<br>" +
+          "n=%{customdata[2]}<extra></extra>",
+      },
+      {
+        x,
+        y: bins.map((b) => b.empirical_p_away_win),
+        customdata,
+        name: "Empirical P(away win)",
+        mode: "lines+markers",
+        type: "scatter",
+        line: { color: "#FB923C", width: 2 },
+        marker: { size: bins.map((b) => (b.low_n ? 6 : 9)), color: "#FB923C" },
+        hovertemplate:
+          "Rating diff (mid): %{x:.0f}<br>" +
+          "P(away win): %{y:.3f}<br>" +
+          "n=%{customdata[2]}<extra></extra>",
+      },
+    ];
+
+    const rateLayout = {
+      font: { color: THEME.text },
+      paper_bgcolor: THEME.plotPaper,
+      plot_bgcolor: THEME.plotPaper,
+      margin: baseMargin,
+      showlegend: true,
+      legend: {
+        orientation: "h",
+        yanchor: "bottom",
+        y: 1.02,
+        x: 0,
+        font: { color: THEME.muted, size: 11 },
+        bgcolor: "rgba(17,24,39,0.75)",
+        bordercolor: "#334155",
+        borderwidth: 1,
+      },
+      xaxis: {
+        ...mutedAxis,
+        title: { text: "Pre-match rating diff (home − away)", font: { color: THEME.muted, size: 12 } },
+        range: [-xAxisHalfSpan, xAxisHalfSpan],
+      },
+      yaxis: {
+        ...mutedAxis,
+        title: { text: "Empirical share", font: { color: THEME.muted, size: 12 } },
+        range: [-0.02, 1.02],
+      },
+    };
+
+    return { mainData, mainLayout, rateData, rateLayout };
+  }, [bins, xAxisHalfSpan, overlayHomeWinOnMain]);
+
+  return (
+    <>
+      <nav className="page-nav" aria-label="Breadcrumb">
+        <a
+          className="link-btn"
+          href="#/"
+          onClick={(e) => {
+            e.preventDefault();
+            navigate("/");
+          }}
+        >
+          ← Map & rankings
+        </a>
+      </nav>
+
+      <header className="page-hero">
+        <p className="sub-head">Model diagnostics</p>
+        <h1>Prediction calibration</h1>
+        <p className="small">
+          Matches are grouped by <strong>home pre-rating minus away pre-rating</strong> (same snapshots as the upset
+          heuristic). Compare mean <strong>realised score</strong> (win&nbsp;=&nbsp;1, draw&nbsp;=&nbsp;0.5, loss
+          &nbsp;=&nbsp;0) to the engine&apos;s mean <strong>Glicko expectation</strong> and a simple Elo-style curve.
+        </p>
+      </header>
+
+      {loading ? (
+        <div className="card card-muted loading-pulse">
+          <p>Loading calibration…</p>
+        </div>
+      ) : error ? (
+        <div className="card error">
+          <p style={{ marginBottom: "12px" }}>{error}</p>
+          <p className="small" style={{ marginBottom: "14px" }}>
+            Generate JSON first from the repo root:{" "}
+            <code style={{ wordBreak: "break-all" }}>python scripts/analyse_europe_calibration.py</code>
+            then reload the API (<code>POST /api/reload</code> if the server was already running).
+          </p>
+          <a
+            className="link-btn"
+            href="#/"
+            onClick={(e) => {
+              e.preventDefault();
+              navigate("/");
+            }}
+          >
+            Back home
+          </a>
+        </div>
+      ) : !bins.length ? (
+        <div className="card card-muted">
+          <p>No calibration bins in the payload.</p>
+        </div>
+      ) : (
+        <>
+          <div className="card">
+            <h2>Summary</h2>
+            {(() => {
+              const filt = data?.filters || {};
+              const nUsed =
+                counts.merged_rows_used_after_week_filter != null
+                  ? counts.merged_rows_used_after_week_filter
+                  : counts.merged_rows_used_after_dropna != null
+                    ? counts.merged_rows_used_after_dropna
+                    : null;
+              const nDropna =
+                counts.merged_rows_after_dropna != null ? counts.merged_rows_after_dropna : nUsed;
+              return (
+                <>
+                  <p className="small" style={{ marginTop: "-8px", marginBottom: "10px" }}>
+                    Bin width <strong>{data?.bin_width ?? "—"}</strong> rating points
+                    {nUsed != null ? (
+                      <>
+                        {" "}
+                        · <strong>{Number(nUsed).toLocaleString()}</strong> matches in calibration
+                        {filt.applied ? (
+                          <>
+                            {" "}
+                            (last <strong>{filt.distinct_weeks_used}</strong> distinct rating weeks{" "}
+                            <strong>{filt.week_id_min}</strong>–<strong>{filt.week_id_max}</strong>)
+                          </>
+                        ) : null}
+                      </>
+                    ) : null}
+                    {data?.generated_at ? (
+                      <>
+                        {" "}
+                        · Generated <strong>{String(data.generated_at).slice(0, 19).replace("T", " ")}</strong> UTC
+                      </>
+                    ) : null}
+                  </p>
+                  {filt.applied && filt.truncated_to_all_available ? (
+                    <p className="small" style={{ marginTop: 0, marginBottom: "10px", color: THEME.muted }}>
+                      Requested last <strong>{filt.last_weeks_requested}</strong> rating weeks; file has only{" "}
+                      <strong>{filt.distinct_weeks_available}</strong> distinct weeks — used entire span.
+                    </p>
+                  ) : null}
+                  {filt.applied && nDropna != null && nUsed != null && Number(nDropna) > Number(nUsed) ? (
+                    <p className="small" style={{ marginTop: 0, marginBottom: "10px", color: THEME.muted }}>
+                      <strong>{Number(nDropna).toLocaleString()}</strong> rows after merge/dropna before the week
+                      window.
+                    </p>
+                  ) : null}
+                </>
+              );
+            })()}
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Metric</th>
+                    <th>Glicko pred.</th>
+                    <th>Elo-400 baseline</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>MAE (vs realised score)</td>
+                    <td className="rating-strong">
+                      {gm.mae_expected_score_glicko_pred != null
+                        ? Number(gm.mae_expected_score_glicko_pred).toFixed(4)
+                        : "—"}
+                    </td>
+                    <td>
+                      {gm.mae_expected_score_elo400_baseline != null
+                        ? Number(gm.mae_expected_score_elo400_baseline).toFixed(4)
+                        : "—"}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>RMSE</td>
+                    <td>
+                      {gm.rmse_expected_score_glicko_pred != null
+                        ? Number(gm.rmse_expected_score_glicko_pred).toFixed(4)
+                        : "—"}
+                    </td>
+                    <td>
+                      {gm.rmse_expected_score_elo400_baseline != null
+                        ? Number(gm.rmse_expected_score_elo400_baseline).toFixed(4)
+                        : "—"}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Mean realised score / mean pred.</td>
+                    <td colSpan={2} className="small">
+                      {gm.mean_actual_score != null ? Number(gm.mean_actual_score).toFixed(4) : "—"} actual vs{" "}
+                      {gm.mean_pred_pA != null ? Number(gm.mean_pred_pA).toFixed(4) : "—"} pred.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="card">
+            <h2>Chart window</h2>
+            <p className="small" style={{ marginTop: "-8px", marginBottom: "14px" }}>
+              Horizontal axis shows pre-match rating difference (home − away). Drag to zoom out for blowouts or zoom in
+              on tight matches.
+            </p>
+            <label htmlFor="cal-x-span-slider" style={{ display: "block", marginBottom: "10px" }}>
+              <span className="small" style={{ fontWeight: 600, color: "var(--text-muted)" }}>
+                Half-span ±{xAxisHalfSpan} pts
+              </span>
+              <span className="small" style={{ marginLeft: "8px", color: THEME.muted }}>
+                (full width {-xAxisHalfSpan} … +{xAxisHalfSpan})
+              </span>
+            </label>
+            <input
+              id="cal-x-span-slider"
+              type="range"
+              min={50}
+              max={xSliderMax}
+              step={25}
+              value={xAxisHalfSpan}
+              onChange={(e) => setXAxisHalfSpan(Number(e.target.value))}
+              aria-valuemin={50}
+              aria-valuemax={xSliderMax}
+              aria-valuenow={xAxisHalfSpan}
+              aria-label="Calibration charts horizontal axis half-span in rating points"
+              style={{
+                width: "100%",
+                maxWidth: "520px",
+                accentColor: "var(--primary-bright)",
+                cursor: "pointer",
+              }}
+            />
+            <p className="kbd-hint" style={{ marginTop: "10px", marginBottom: 0 }}>
+              Range up to ±{xSliderMax} from loaded bins (step 25).
+            </p>
+          </div>
+
+          <div className="card">
+            <h2>Mean score by rating gap</h2>
+            <p className="small" style={{ marginTop: "-8px", marginBottom: "12px" }}>
+              <strong>X:</strong> bin centre <code>rating_diff_mid</code> (home − away pre-rating).{" "}
+              <strong>Y:</strong> <code>mean_actual_score</code> vs <code>mean_pred_pA</code> (plus Elo baseline).
+              All share the 0–1 vertical scale so empirical home-win rate is comparable to mean score when overlaid.
+            </p>
+            <label
+              className="small"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                cursor: "pointer",
+                marginBottom: "14px",
+                userSelect: "none",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={overlayHomeWinOnMain}
+                onChange={(e) => setOverlayHomeWinOnMain(e.target.checked)}
+              />
+              Overlay <strong>empirical_p_home_win</strong> (diamonds, dashed purple)
+            </label>
+            <p className="small" style={{ marginTop: "-6px", marginBottom: "12px", color: THEME.muted }}>
+              Fainter markers = sparse bins. Good calibration: realised mean tracks Glicko pred.; P(home win) rises
+              with rating advantage but need not equal mean score (draws count in mean score only).
+            </p>
+            <Plot data={calibrationPlots.mainData} layout={calibrationPlots.mainLayout} />
+          </div>
+
+          <div className="card">
+            <h2>Empirical W/D/A shares</h2>
+            <p className="small" style={{ marginTop: "-8px" }}>
+              Outcome frequencies within each rating-difference bin (home perspective).
+            </p>
+            <Plot data={calibrationPlots.rateData} layout={calibrationPlots.rateLayout} />
+          </div>
+
+          <div className="card">
+            <h2>Notes</h2>
+            <ul className="small" style={{ marginTop: 0, paddingLeft: "1.2rem", lineHeight: 1.55 }}>
+              {(data?.notes && Array.isArray(data.notes) ? data.notes : []).map((line, i) => (
+                <li key={`cal-note-${i}`} style={{ marginBottom: "8px" }}>
+                  {line}
+                </li>
+              ))}
+            </ul>
+            <p style={{ marginBottom: 0 }}>
+              <a
+                className="link-btn link-btn--primary"
+                href="#/info"
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate("/info");
+                }}
+              >
+                Method & narrative tooling → Info
+              </a>
+            </p>
+          </div>
+        </>
+      )}
+    </>
   );
 }
 
@@ -515,6 +1068,10 @@ function App() {
   const [clubNarrative, setClubNarrative] = useState(null);
   const [clubLoading, setClubLoading] = useState(false);
   const [clubError, setClubError] = useState("");
+
+  const [calibrationData, setCalibrationData] = useState(null);
+  const [calibrationLoading, setCalibrationLoading] = useState(false);
+  const [calibrationError, setCalibrationError] = useState("");
 
   const { route, navigate, hash } = useHashRoute();
 
@@ -549,6 +1106,34 @@ function App() {
     () => teams.find((team) => String(team.pid) === String(selectedTeamId)),
     [teams, selectedTeamId]
   );
+
+  useLayoutEffect(() => {
+    if (route.page !== "calibration") return;
+    setCalibrationLoading(true);
+    setCalibrationError("");
+  }, [route.page, hash]);
+
+  useEffect(() => {
+    if (route.page !== "calibration") return;
+    let cancelled = false;
+    getJson("/api/calibration")
+      .then((d) => {
+        if (!cancelled) {
+          setCalibrationData(d);
+          setCalibrationLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setCalibrationData(null);
+          setCalibrationError(err.message || "Failed to load calibration.");
+          setCalibrationLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [route.page, hash]);
 
   useEffect(() => {
     async function init() {
@@ -1036,6 +1621,16 @@ function App() {
             </a>
             <a
               className="link-btn link-btn--header"
+              href="#/calibration"
+              onClick={(e) => {
+                e.preventDefault();
+                navigate("/calibration");
+              }}
+            >
+              Calibration
+            </a>
+            <a
+              className="link-btn link-btn--header"
               href="#/info"
               onClick={(e) => {
                 e.preventDefault();
@@ -1048,12 +1643,19 @@ function App() {
         </div>
       </header>
       <main id="main-content" className="container">
-      {error && route.page !== "club" && route.page !== "info" && (
+      {error && route.page !== "club" && route.page !== "info" && route.page !== "calibration" && (
         <div className="card error">{error}</div>
       )}
 
       {route.page === "info" ? (
         <InfoPage navigate={navigate} />
+      ) : route.page === "calibration" ? (
+        <CalibrationPage
+          navigate={navigate}
+          data={calibrationData}
+          loading={calibrationLoading}
+          error={calibrationError}
+        />
       ) : route.page === "club" ? (
         <>
           <nav className="page-nav" aria-label="Breadcrumb">
@@ -1130,10 +1732,6 @@ function App() {
               {clubNarrative && clubNarrative.paragraphs?.length ? (
                 <div className="card">
                   <h2>Club narrative</h2>
-                  <p className="small" style={{ marginTop: "-8px", color: THEME.muted }}>
-                    Weekly domestic vs continental ladder ranks (same European universe as country narratives),
-                    rating trend and optional regime splits.
-                  </p>
                   {clubNarrative.paragraphs.map((para, i) => (
                     <NarrativeParagraph key={`club-nar-${i}`} text={para} />
                   ))}
@@ -1320,11 +1918,6 @@ function App() {
               {countryNarrative && countryNarrative.paragraphs?.length ? (
                 <div className="card">
                   <h2>Country narrative</h2>
-                  <p className="small" style={{ marginTop: "-8px", color: THEME.muted }}>
-                    Generated from weekly league aggregates (pandas / numpy), calendar wording (pendulum),
-                    continental ladder counts vs European-wide weekly ranks, change-points on the national
-                    average (ruptures PELT when installed), and templated copy (Jinja2).
-                  </p>
                   {countryNarrative.paragraphs.map((para, i) => (
                     <NarrativeParagraph key={`nar-${i}`} text={para} />
                   ))}

@@ -1,4 +1,4 @@
-"""Country-level prose narrative from weekly rating aggregates (pandas/numpy + Jinja2 + pendulum + ruptures)."""
+"""Country-level prose narrative from weekly rating aggregates."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from .data_service import (
     get_country_top_n_timeseries,
     load_weekly_ratings,
     narrative_ladder_week_allowlist,
+    visibility_eligible_team_ids,
 )
 
 
@@ -93,7 +94,6 @@ def _continental_paragraph_for_template(
     continental_stats: dict[str, Any],
     n_eu_weeks: int,
     first_month: str,
-    ladder_weeks_dropped: int = 0,
 ) -> str:
     """Single narrative paragraph; uses ** for frontend bold."""
     if n_eu_weeks <= 0 or not continental_cutoffs:
@@ -125,22 +125,142 @@ def _continental_paragraph_for_template(
     labels_joined = ", ".join(labels_z)
     pct = int(round(100.0 * share_smallest)) if share_smallest is not None else 0
 
-    tail = ""
-    if ladder_weeks_dropped > 0:
-        tail = (
-            f" Continental ladder counts omit the first **{ladder_weeks_dropped}** chronological rating "
-            f"weeks while mass ratings / ties stop dominating the sort."
-        )
-
     return (
-        f"Relative to **continental** peers (each week, every club in the European dataset is ranked by "
-        f"rating; ties keep file order): averaged across **{eu_weeks_fmt}** weekly snapshots, "
+        f"Relative to **continental** peers (weekly snapshots across the full European dataset): averaged "
+        f"across **{eu_weeks_fmt}** weekly snapshots, "
         f"**{country_display}** typically places {mean_joined}. "
         f"In the **latest** week those counts are {latest_joined} "
         f"({labels_joined} respectively); peak counts in a single week since **{first_month}** were "
         f"{max_joined}. At least one club from **{country_display}** sat in the continental "
-        f"**top {z_sorted[0]}** in about **{pct}%** of European weeks.{tail}"
+        f"**top {z_sorted[0]}** in about **{pct}%** of European weeks."
     )
+
+
+def _club_highlights_for_country(country_slug: str) -> tuple[str, dict[str, Any]]:
+    """
+    Visible clubs only (same gate as map/lists). Returns one prose paragraph + structured facts.
+    """
+    slug = country_slug.strip().lower()
+    eligible = visibility_eligible_team_ids()
+    base = _strip_international(load_weekly_ratings())
+    cc = base.loc[base["country_name"].str.lower() == slug].copy()
+    if eligible:
+        cc = cc.loc[cc["pid"].astype(int).isin(eligible)]
+    out_facts: dict[str, Any] = {"eligible_clubs": int(cc["pid"].nunique()) if not cc.empty else 0}
+    if cc.empty:
+        return "", out_facts
+
+    cc = cc.sort_values(["pid", "week"])
+    pid_to_name: dict[int, str] = {}
+    for pid, grp in cc.groupby("pid", sort=False):
+        pid_to_name[int(pid)] = str(grp.iloc[0]["team_name"]).strip()
+
+    wow_best: tuple[float, int, str] | None = None
+    for pid, grp in cc.groupby("pid", sort=False):
+        grp = grp.sort_values("week")
+        if len(grp) < 2:
+            continue
+        delta = float(grp.iloc[-1]["rating"]) - float(grp.iloc[-2]["rating"])
+        cand = (delta, int(pid), pid_to_name[int(pid)])
+        if wow_best is None:
+            wow_best = cand
+        elif cand[0] > wow_best[0]:
+            wow_best = cand
+        elif cand[0] == wow_best[0] and cand[2].lower() < wow_best[2].lower():
+            wow_best = cand
+
+    peaks: list[tuple[float, int, str]] = []
+    means: list[tuple[float, int, str]] = []
+    for pid, grp in cc.groupby("pid", sort=False):
+        r = grp["rating"].astype(float)
+        peaks.append((float(r.max()), int(pid), pid_to_name[int(pid)]))
+        means.append((float(r.mean()), int(pid), pid_to_name[int(pid)]))
+
+    best_peak = max(peaks, key=lambda t: (t[0], t[2].lower())) if peaks else None
+    best_mean = max(means, key=lambda t: (t[0], t[2].lower())) if means else None
+
+    leader_counts: dict[int, int] = {}
+    for _, sub in cc.groupby("week", sort=True):
+        sub = sub.sort_values(["rating", "pid"], ascending=[False, True])
+        if sub.empty:
+            continue
+        lid = int(sub.iloc[0]["pid"])
+        leader_counts[lid] = leader_counts.get(lid, 0) + 1
+
+    leader_best: tuple[int, int, str] | None = None
+    for pid, n in leader_counts.items():
+        name = pid_to_name[pid]
+        cand = (n, pid, name)
+        if leader_best is None:
+            leader_best = cand
+        elif n > leader_best[0]:
+            leader_best = cand
+        elif n == leader_best[0] and name.lower() < leader_best[2].lower():
+            leader_best = cand
+
+    sentences: list[str] = []
+    if wow_best is not None:
+        sentences.append(
+            f"Between the previous rating week and the latest, **{wow_best[2]}** moved the most "
+            f"(**{wow_best[0]:+.1f}** points)."
+        )
+    if best_peak is not None:
+        if (
+            best_mean is not None
+            and best_mean[1] == best_peak[1]
+            and abs(best_mean[0] - best_peak[0]) > 1e-6
+        ):
+            sentences.append(
+                f"**{best_peak[2]}** reached the highest peak rating (**{best_peak[0]:.1f}**) and also "
+                f"the strongest average across its weekly history (**{best_mean[0]:.1f}**)."
+            )
+        elif best_mean is not None and best_mean[1] != best_peak[1]:
+            sentences.append(
+                f"**{best_peak[2]}** reached the highest peak rating (**{best_peak[0]:.1f}**)."
+            )
+            sentences.append(
+                f"**{best_mean[2]}** has the highest mean rating across weekly snapshots (**{best_mean[0]:.1f}**)."
+            )
+        else:
+            sentences.append(
+                f"**{best_peak[2]}** reached the highest peak rating (**{best_peak[0]:.1f}**)."
+            )
+    if leader_best is not None and leader_best[0] > 0:
+        sentences.append(
+            f"**{leader_best[2]}** leads for time spent as the country’s single top-rated club (**{leader_best[0]}** "
+            f"distinct rating weeks in this dataset)."
+        )
+
+    out_facts.update(
+        {
+            "week_over_week_leader": (
+                {"delta": wow_best[0], "team_id": wow_best[1], "team_name": wow_best[2]} if wow_best else None
+            ),
+            "peak_rating_leader": (
+                {"rating": best_peak[0], "team_id": best_peak[1], "team_name": best_peak[2]}
+                if best_peak
+                else None
+            ),
+            "mean_rating_leader": (
+                {"rating": best_mean[0], "team_id": best_mean[1], "team_name": best_mean[2]}
+                if best_mean
+                else None
+            ),
+            "domestic_weeks_at_rank_one_leader": (
+                {"weeks": leader_best[0], "team_id": leader_best[1], "team_name": leader_best[2]}
+                if leader_best
+                else None
+            ),
+        }
+    )
+
+    if not sentences:
+        return "", out_facts
+    # Two sentences per block reads better in the narrative column when split on \\n\\n below.
+    chunks = []
+    for i in range(0, len(sentences), 2):
+        chunks.append(" ".join(sentences[i : i + 2]))
+    return "\n\n".join(chunks), out_facts
 
 
 def _country_display_name(country_slug: str) -> str:
@@ -363,8 +483,9 @@ def build_country_narrative(
         continental_stats,
         n_eu_weeks,
         _human_week(dates[0]),
-        ladder_weeks_dropped=ladder_weeks_dropped,
     )
+
+    club_highlights_paragraph, club_highlight_facts = _club_highlights_for_country(slug)
 
     ctx: dict[str, Any] = {
         "country_display": country_disp,
@@ -392,6 +513,7 @@ def build_country_narrative(
         "n_regimes": len(regimes),
         "regime_shift_typical": round(regime_delta_typical, 1),
         "continental_paragraph": continental_paragraph,
+        "club_highlights_paragraph": club_highlights_paragraph,
     }
 
     env = Environment(loader=BaseLoader(), autoescape=False)
@@ -417,6 +539,7 @@ def build_country_narrative(
             "latest_elite_gap_top_minus_bottom": ctx["latest_spread"],
             "change_point_segments": ctx["n_regimes"],
             "change_point_backend": change_backend,
+            "club_highlights": club_highlight_facts,
         },
     }
 
@@ -433,14 +556,16 @@ _NARRATIVE_TEMPLATE = """{% macro oxford(names) -%}
 {%- endif -%}
 {%- endmacro %}
 
-The model covers **{{ country_display }}** over **{{ n_weeks_fmt }}** weekly rating snapshots, from **{{ first_month }}** through **{{ latest_month }}**{% if ladder_weeks_dropped %} (**after dropping the first {{ ladder_weeks_dropped }} chronological weeks** where default masses make ladder rankings unreliable){% endif %}. In the latest week there are **{{ active_latest }}** rated clubs (historically about **{{ active_mean }}** active per week on average), with a national mean rating of **{{ latest_avg }}** versus **{{ hist_mean }}** for the full span — about **{{ above_hist_fmt }}** points versus that long-run average.
+The model covers **{{ country_display }}** over **{{ n_weeks_fmt }}** weekly rating snapshots, from **{{ first_month }}** through **{{ latest_month }}**. In the latest week there are **{{ active_latest }}** rated clubs (historically about **{{ active_mean }}** active per week on average), with a national mean rating of **{{ latest_avg }}** versus **{{ hist_mean }}** for the full span — about **{{ above_hist_fmt }}** points versus that long-run average.
 
 Across the whole series the gap between the strongest and weakest club each week averages **{{ mean_spread }}** rating points; most recently that elite gap is **{{ latest_spread }}**. Typical week-to-week movement in the national mean is **{{ volatility }}** points (standard deviation of weekly changes), so aggregate swings are {% if volatility > 12 %}quite lively{% elif volatility > 7 %}moderate{% else %}fairly smooth{% endif %} at country scale.
 
-On a slow-moving trend line through the national average, ratings have **{{ trend_word }}** at roughly **{{ slope_per_year }}** points per year (a coarse linear fit through time; European fixtures and model tuning both influence this).
+On a slow-moving trend line through the national average, ratings have **{{ trend_word }}** at roughly **{{ slope_per_year }}** points per year (linear fit through time).
 
 {% if continental_paragraph %}{{ continental_paragraph }}{% endif %}
 
-{% if has_regimes %}Change-point style splits on the national average divide the timeline into **{{ n_regimes }}** broad segments since {{ first_month }} (ruptures PELT when available, otherwise greedy SSE splits — both are coarse summaries). Typical jumps between adjacent segment means are about **{{ regime_shift_typical }}** rating points.{% endif %}
+{% if club_highlights_paragraph %}{{ club_highlights_paragraph }}{% endif %}
+
+{% if has_regimes %}Segmenting the national average over time suggests **{{ n_regimes }}** broad eras since **{{ first_month }}**; typical steps between adjacent segment averages are about **{{ regime_shift_typical }}** rating points.{% endif %}
 
 Today’s strongest clubs in this country (latest rating week) include {{ oxford(top_clubs) }} — open individual club pages for match-by-match detail."""

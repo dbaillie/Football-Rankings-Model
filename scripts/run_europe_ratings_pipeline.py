@@ -77,6 +77,11 @@ def main() -> None:
     )
     parser.add_argument("--dry-run", action="store_true", help="Print commands only")
     parser.add_argument(
+        "--run-calibration",
+        action="store_true",
+        help="After Europe Glicko (unless skipped), run scripts/analyse_europe_calibration.py on output/europe",
+    )
+    parser.add_argument(
         "--reset-euro",
         action="store_true",
         help="Before UEFA ingest, delete euro cache files (see scripts/reset_euro_ingest_artifacts.py)",
@@ -171,6 +176,18 @@ def main() -> None:
             [
                 py,
                 str(scripts_dir / "run_glicko_europe.py"),
+                "--output-root",
+                str(outdir),
+            ],
+            cwd=REPO_ROOT,
+            dry_run=args.dry_run,
+        )
+
+    if args.run_calibration:
+        _run(
+            [
+                py,
+                str(scripts_dir / "analyse_europe_calibration.py"),
                 "--output-root",
                 str(outdir),
             ],

@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from .contact_email import contact_smtp_configured, send_contact_submission
 from .country_narrative import build_country_narrative
 from .team_narrative import build_team_narrative
+from .calibration_service import clear_calibration_summary_cache, load_calibration_summary
 from .data_service import (
     OUTPUT_DIR,
     clear_data_caches,
@@ -133,6 +134,7 @@ def health() -> dict[str, str]:
         else "yes",
         "club_json_try_get": "/api/clubdata?team_id=498",
         "routing_probe": "/api/ping-club",
+        "calibration_summary": "/api/calibration",
         "contact_email": "configured" if contact_smtp_configured() else "not_configured",
     }
 
@@ -184,6 +186,7 @@ async def contact_submit(body: ContactBody) -> dict[str, bool]:
 @app.post("/api/reload")
 def reload_data() -> dict[str, str]:
     clear_data_caches()
+    clear_calibration_summary_cache()
     return {"status": "reloaded"}
 
 
@@ -200,6 +203,21 @@ def teams(country: str | None = Query(default=None)) -> list[dict]:
 @app.get("/api/snapshot")
 def snapshot(top_n: int = Query(default=25, ge=1, le=100)) -> list[dict]:
     return get_latest_snapshot(top_n=top_n)
+
+
+@app.get("/api/calibration")
+def calibration() -> dict:
+    """Calibration bins / globals from output/europe/calibration_summary.json (run analyse_europe_calibration.py)."""
+    payload = load_calibration_summary()
+    if payload is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "calibration_summary.json not found or unreadable. "
+                "Run: python scripts/analyse_europe_calibration.py"
+            ),
+        )
+    return payload
 
 
 @app.get("/api/country-summaries")

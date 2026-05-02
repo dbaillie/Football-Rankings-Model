@@ -10,6 +10,10 @@ Generate data before starting the web app:
 python scripts/create_data_model.py
 python scripts/resolve_club_identities.py --write
 python scripts/run_glicko_europe.py
+# Optional: empirical calibration tables + JSON for the API / future UI tab
+python scripts/analyse_europe_calibration.py
+# Recent window only (last N distinct yyyyww rating weeks):
+python scripts/analyse_europe_calibration.py --last-weeks 104
 ```
 
 UEFA-only ingest can be run independently with a pluggable provider:
@@ -33,6 +37,7 @@ python scripts/ingest_euro_comps_from_config.py --provider football_data_org
   - Biggest upsets (based on expected result vs actual result)
   - Largest rating swings
 - Latest top-25 snapshot table
+- **Calibration** tab (`#/calibration`) — charts + summary table from `GET /api/calibration` (run `scripts/analyse_europe_calibration.py` after Glicko).
 
 ## Run locally
 
