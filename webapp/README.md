@@ -84,6 +84,7 @@ The dashboard UI is built with **Vite + React** under `webapp/frontend/` (recomm
 
 - **Hosted SPA (Vercel):** set `VITE_API_BASE_URL` to your Render (or other) API origin, no trailing slash. See `webapp/frontend/.env.local.example`.
 - **API CORS:** after you know the Vercel URL, set `FOOTBALL_CORS_ORIGINS=https://your-site.vercel.app` (comma-separated). If unset, the API allows all origins (`*`).
+- **Low RAM (e.g. Render free ~512 MiB):** set **`FOOTBALL_LOAD_LAST_CALENDAR_YEARS=10`** (or `8`, etc.) on the API service. That keeps only the last *N* calendar years of **`europe_weekly_ratings.csv`** and **`europe_match_results.csv`** in memory (loaded in chunks so the giant weekly file is not fully materialised). Older history disappears from the hosted site until you raise RAM or remove this setting.
 
 Then open [http://127.0.0.1:8000](http://127.0.0.1:8000) when using option (1) or (3).
 

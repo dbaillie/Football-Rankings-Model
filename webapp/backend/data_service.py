@@ -24,6 +24,30 @@ OUTPUT_DIR = _europe_output_dir()
 ANALYTICAL_START_WEEK = 200531
 ANALYTICAL_START_DATE = pd.Timestamp("2005-07-01")
 
+
+def _load_recent_calendar_years_limit() -> int | None:
+    """
+    If set to a positive integer N, only load match rows and weekly rating rows from the last N
+    calendar years (including the current year). Example: N=10 and year 2026 → weeks with YYYY ≥ 2017.
+    Unset or 0 = no trimming (full CSV in memory — can exceed ~512 MiB on small hosts).
+    Env: FOOTBALL_LOAD_LAST_CALENDAR_YEARS
+    """
+    raw = os.environ.get("FOOTBALL_LOAD_LAST_CALENDAR_YEARS", "").strip()
+    if not raw.isdigit():
+        return None
+    n = int(raw)
+    return n if n > 0 else None
+
+
+def _min_calendar_year_for_recent_load() -> int | None:
+    """Smallest calendar year to keep when trimming (inclusive)."""
+    n = _load_recent_calendar_years_limit()
+    if n is None:
+        return None
+    from datetime import date
+
+    return date.today().year - n + 1
+
 # Clubs appear in map aggregates, top snapshot, country charts, and /api/teams only if they have strictly more than
 # this many dated matches in each listed calendar year (home or away counts once per fixture).
 CLUB_VISIBILITY_MIN_MATCHES_PER_YEAR = max(
@@ -141,13 +165,10 @@ def load_teams() -> pd.DataFrame:
     return teams
 
 
-@lru_cache(maxsize=1)
-def load_weekly_ratings() -> pd.DataFrame:
-    weekly = pd.read_csv(
-        OUTPUT_DIR / "europe_weekly_ratings.csv",
-        dtype={"country_name": "string", "team_name": "string"},
-        low_memory=False,
-    )
+def _finalize_weekly_ratings_frame(weekly: pd.DataFrame) -> pd.DataFrame:
+    """Shared cleanup after load (full or chunked)."""
+    if weekly.empty:
+        return weekly
     weekly["week"] = weekly["week"].astype(int)
     weekly["pid"] = weekly["pid"].astype(int)
     weekly = weekly[weekly["week"] >= ANALYTICAL_START_WEEK].copy()
@@ -156,6 +177,32 @@ def load_weekly_ratings() -> pd.DataFrame:
     weekly["country_name"] = weekly["country_name"].fillna("unknown").astype(str)
     weekly["team_name"] = weekly["team_name"].fillna("Unknown Team").astype(str)
     return weekly
+
+
+@lru_cache(maxsize=1)
+def load_weekly_ratings() -> pd.DataFrame:
+    path = OUTPUT_DIR / "europe_weekly_ratings.csv"
+    dtype_kw = {"dtype": {"country_name": "string", "team_name": "string"}, "low_memory": False}
+    min_cal_year = _min_calendar_year_for_recent_load()
+
+    if min_cal_year is None:
+        weekly = pd.read_csv(path, **dtype_kw)
+        return _finalize_weekly_ratings_frame(weekly)
+
+    # Chunked read keeps peak RAM lower than loading the full multi‑100 MB CSV at once.
+    pieces: list[pd.DataFrame] = []
+    for chunk in pd.read_csv(path, chunksize=150_000, **dtype_kw):
+        chunk["week"] = chunk["week"].astype(int)
+        chunk["pid"] = chunk["pid"].astype(int)
+        wy = chunk["week"] // 100
+        chunk = chunk.loc[
+            (chunk["week"] >= ANALYTICAL_START_WEEK) & (wy.astype(int) >= min_cal_year)
+        ]
+        if not chunk.empty:
+            pieces.append(chunk)
+
+    weekly = pd.concat(pieces, ignore_index=True) if pieces else pd.read_csv(path, nrows=0, **dtype_kw)
+    return _finalize_weekly_ratings_frame(weekly)
 
 
 @lru_cache(maxsize=1)
@@ -172,12 +219,34 @@ def load_final_ratings() -> pd.DataFrame:
 
 @lru_cache(maxsize=1)
 def load_match_results() -> pd.DataFrame:
-    matches = pd.read_csv(OUTPUT_DIR / "europe_match_results.csv")
-    matches["match_date"] = pd.to_datetime(matches["match_date"], errors="coerce")
-    matches = matches[
-        (matches["week"].astype(int) >= ANALYTICAL_START_WEEK)
-        & (matches["match_date"] >= ANALYTICAL_START_DATE)
-    ].copy()
+    path = OUTPUT_DIR / "europe_match_results.csv"
+    min_cal_year = _min_calendar_year_for_recent_load()
+
+    if min_cal_year is None:
+        matches = pd.read_csv(path)
+    else:
+        pieces: list[pd.DataFrame] = []
+        for chunk in pd.read_csv(path, chunksize=120_000):
+            chunk["match_date"] = pd.to_datetime(chunk["match_date"], errors="coerce")
+            wk = chunk["week"].astype(int)
+            md = chunk["match_date"]
+            mask = (
+                (wk >= ANALYTICAL_START_WEEK)
+                & (md >= ANALYTICAL_START_DATE)
+                & md.notna()
+                & (md.dt.year >= min_cal_year)
+            )
+            chunk = chunk.loc[mask].copy()
+            if not chunk.empty:
+                pieces.append(chunk)
+        matches = pd.concat(pieces, ignore_index=True) if pieces else pd.read_csv(path, nrows=0)
+
+    if min_cal_year is None:
+        matches["match_date"] = pd.to_datetime(matches["match_date"], errors="coerce")
+        matches = matches[
+            (matches["week"].astype(int) >= ANALYTICAL_START_WEEK)
+            & (matches["match_date"] >= ANALYTICAL_START_DATE)
+        ].copy()
 
     # Approximate expected result from pre-match rating differential.
     expected_home = 1.0 / (
