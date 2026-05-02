@@ -9,7 +9,18 @@ import numpy as np
 import pandas as pd
 
 
-OUTPUT_DIR = Path(__file__).resolve().parents[2] / "output" / "europe"
+def _europe_output_dir() -> Path:
+    """
+    Default: repo-relative output/europe.
+    On Render (or any host) set FOOTBALL_OUTPUT_EUROPE_DIR to an absolute path where the CSVs live.
+    """
+    override = os.environ.get("FOOTBALL_OUTPUT_EUROPE_DIR", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return (Path(__file__).resolve().parents[2] / "output" / "europe").resolve()
+
+
+OUTPUT_DIR = _europe_output_dir()
 ANALYTICAL_START_WEEK = 200531
 ANALYTICAL_START_DATE = pd.Timestamp("2005-07-01")
 

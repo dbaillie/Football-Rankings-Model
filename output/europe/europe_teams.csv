@@ -1,0 +1,1518 @@
+team_id,team_name,country_id,country_name
+1,Sturm Graz,1,austria
+2,Salzburg,1,austria
+3,Mattersburg,1,austria
+4,Neustadt,1,austria
+5,SK Rapid,1,austria
+6,Wacker Innsbruck,1,austria
+7,Admira,1,austria
+8,Ried,1,austria
+9,Wolfsberger AC,1,austria
+10,Austria Vienna,1,austria
+11,Grodig,1,austria
+12,Altach,1,austria
+13,St. Polten,1,austria
+14,LASK,1,austria
+15,Hartberg,1,austria
+16,Tirol,1,austria
+17,A. Klagenfurt,1,austria
+18,A. Lustenau,1,austria
+19,BW Linz,1,austria
+20,Grazer AK,1,austria
+21,Beveren,2,belgium
+22,Charleroi,2,belgium
+23,Mechelen,2,belgium
+24,Genk,2,belgium
+25,Louvieroise,2,belgium
+26,Lokeren,2,belgium
+27,Mouscron,2,belgium
+28,Germinal,2,belgium
+29,Westerlo,2,belgium
+30,Antwerp,2,belgium
+31,Aalst,2,belgium
+32,Lierse,2,belgium
+33,Club Brugge,2,belgium
+34,Gent,2,belgium
+35,Harelbeke,2,belgium
+36,Standard,2,belgium
+37,St Truiden,2,belgium
+38,Anderlecht,2,belgium
+39,Lommel,2,belgium
+40,Molenbeek,2,belgium
+41,Bergen,2,belgium
+42,Heusden Zolder,2,belgium
+43,Cercle Brugge,2,belgium
+44,FC Brussels,2,belgium
+45,Oostende,2,belgium
+46,Waregem,2,belgium
+47,Roeselare,2,belgium
+48,Dender,2,belgium
+49,Kortrijk,2,belgium
+50,Tubize,2,belgium
+51,Eupen,2,belgium
+52,Oud-Heverlee Leuven,2,belgium
+53,Waasland-Beveren,2,belgium
+54,Mouscron-Peruwelz,2,belgium
+55,Beerschot VA,2,belgium
+56,Seraing,2,belgium
+57,St. Gilloise,2,belgium
+58,RWD Molenbeek,2,belgium
+59,RAAL La Louviere,2,belgium
+60,Geel,2,belgium
+61,Aarhus,3,denmark
+62,Aalborg,3,denmark
+63,Sonderjyske,3,denmark
+64,Randers FC,3,denmark
+65,Esbjerg,3,denmark
+66,Silkeborg,3,denmark
+67,Brondby,3,denmark
+68,Odense,3,denmark
+69,FC Copenhagen,3,denmark
+70,Midtjylland,3,denmark
+71,Horsens,3,denmark
+72,Nordsjaelland,3,denmark
+73,Viborg,3,denmark
+74,Vestsjaelland,3,denmark
+75,Hobro,3,denmark
+76,Lyngby,3,denmark
+77,Vendsyssel,3,denmark
+78,Helsingor,3,denmark
+79,Vejle,3,denmark
+80,Hvidovre IF,3,denmark
+81,Fredericia,3,denmark
+82,Charlton,4,england
+83,Man City,4,england
+84,Chelsea,4,england
+85,West Ham,4,england
+86,Coventry,4,england
+87,Middlesbrough,4,england
+88,Derby,4,england
+89,Southampton,4,england
+90,Leeds,4,england
+91,Everton,4,england
+92,Leicester,4,england
+93,Aston Villa,4,england
+94,Liverpool,4,england
+95,Bradford,4,england
+96,Sunderland,4,england
+97,Arsenal,4,england
+98,Tottenham,4,england
+99,Ipswich,4,england
+100,Man United,4,england
+101,Newcastle,4,england
+102,Barnsley,4,england
+103,Norwich,4,england
+104,Blackburn,4,england
+105,Crystal Palace,4,england
+106,Bolton,4,england
+107,Burnley,4,england
+108,Fulham,4,england
+109,Crewe,4,england
+110,Gillingham,4,england
+111,Stockport,4,england
+112,Grimsby,4,england
+113,Preston,4,england
+114,Huddersfield,4,england
+115,Watford,4,england
+117,West Brom,4,england
+118,QPR,4,england
+119,Birmingham,4,england
+120,Sheffield United,4,england
+121,Portsmouth,4,england
+122,Wimbledon,4,england
+123,Tranmere,4,england
+124,Wolves,4,england
+125,Sheffield Weds,4,england
+126,Bristol Rvs,4,england
+127,Bournemouth,4,england
+128,Cambridge,4,england
+129,Bury,4,england
+130,Luton,4,england
+131,Notts County,4,england
+132,Millwall,4,england
+133,Reading,4,england
+134,Northampton,4,england
+135,Brentford,4,england
+136,Oldham,4,england
+137,Port Vale,4,england
+138,Oxford,4,england
+139,Peterboro,4,england
+140,Rotherham,4,england
+141,Walsall,4,england
+142,Stoke,4,england
+143,Wycombe,4,england
+144,Swansea,4,england
+145,Wigan,4,england
+146,Swindon,4,england
+147,Colchester,4,england
+148,Wrexham,4,england
+149,Bristol City,4,england
+150,Barnet,4,england
+151,Shrewsbury,4,england
+152,Blackpool,4,england
+153,Hull,4,england
+154,Carlisle,4,england
+155,Halifax,4,england
+156,Cheltenham,4,england
+157,Mansfield,4,england
+158,Chesterfield,4,england
+159,York,4,england
+160,Exeter,4,england
+161,Cardiff,4,england
+162,Kidderminster,4,england
+163,Torquay,4,england
+164,Lincoln,4,england
+165,Hartlepool,4,england
+166,Macclesfield,4,england
+167,Scunthorpe,4,england
+168,Plymouth,4,england
+169,Leyton Orient,4,england
+170,Rochdale,4,england
+171,Darlington,4,england
+172,Southend,4,england
+173,Brighton,4,england
+174,Rushden & D,4,england
+175,Boston,4,england
+176,Doncaster,4,england
+177,Yeovil,4,england
+178,Milton Keynes Dons,4,england
+179,Chester,4,england
+180,Accrington,4,england
+181,Canvey Island,4,england
+182,Aldershot,4,england
+183,Tamworth,4,england
+184,Burton,4,england
+185,Grays,4,england
+186,Dag and Red,4,england
+187,Southport,4,england
+188,Forest Green,4,england
+189,Gravesend,4,england
+190,Hereford,4,england
+191,Scarborough,4,england
+192,Woking,4,england
+193,Morecambe,4,england
+194,Stevenage,4,england
+195,Altrincham,4,england
+196,Crawley Town,4,england
+197,Northwich,4,england
+198,Stafford Rangers,4,england
+199,St. Albans,4,england
+200,Weymouth,4,england
+201,Droylsden,4,england
+202,Salisbury,4,england
+203,Ebbsfleet,4,england
+204,Farsley,4,england
+205,Histon,4,england
+206,Barrow,4,england
+207,Eastbourne Borough,4,england
+208,Kettering Town,4,england
+209,Lewes,4,england
+211,Gateshead,4,england
+212,Hayes & Yeading,4,england
+213,Newport County,4,england
+214,Bath City,4,england
+215,Fleetwood Town,4,england
+216,Braintree Town,4,england
+217,Alfreton Town,4,england
+218,AFC Telford United,4,england
+220,Hyde United,4,england
+221,Dartford,4,england
+222,Nuneaton Town,4,england
+223,Welling United,4,england
+224,Dover Athletic,4,england
+225,Eastleigh,4,england
+226,Boreham Wood,4,england
+227,Bromley,4,england
+228,Guiseley,4,england
+229,Fylde,4,england
+230,Maidstone,4,england
+231,Maidenhead,4,england
+232,Sutton,4,england
+233,Solihull,4,england
+234,Salford,4,england
+235,Chorley,4,england
+236,Harrogate,4,england
+237,Dorking,4,england
+238,Wealdstone,4,england
+239,Oxford City,4,england
+240,Boston Utd,4,england
+241,Brackley Town,4,england
+242,Truro,4,england
+243,HJK,5,finland
+244,Mariehamn,5,finland
+245,Honka,5,finland
+246,VPS,5,finland
+247,KuPS,5,finland
+248,JJK Jyvaskyla,5,finland
+249,Lahti,5,finland
+250,Haka,5,finland
+251,TPS,5,finland
+252,MyPa,5,finland
+253,Jaro,5,finland
+254,Inter Turku,5,finland
+255,Rovaniemi,5,finland
+256,SJK,5,finland
+257,KTP,5,finland
+258,Ilves,5,finland
+259,HIFK,5,finland
+260,PK-35 Vantaa,5,finland
+261,PS Kemi,5,finland
+262,KPV Kokkola,5,finland
+263,AC Oulu,5,finland
+264,Gnistan,5,finland
+265,Ekenas,5,finland
+266,Marseille,6,france
+267,Troyes,6,france
+268,Paris SG,6,france
+269,Strasbourg,6,france
+270,Auxerre,6,france
+271,Sedan,6,france
+272,Bordeaux,6,france
+273,Metz,6,france
+274,Guingamp,6,france
+275,St Etienne,6,france
+276,Lille,6,france
+277,Monaco,6,france
+278,Lyon,6,france
+279,Rennes,6,france
+280,Nantes,6,france
+281,Lens,6,france
+282,Toulouse,6,france
+283,Bastia,6,france
+284,Wasquehal,6,france
+285,Nancy,6,france
+286,Ajaccio,6,france
+287,Le Mans,6,france
+288,Beauvais,6,france
+289,Montpellier,6,france
+290,Caen,6,france
+291,Cannes,6,france
+292,Chateauroux,6,france
+293,Martigues,6,france
+294,Creteil,6,france
+295,Lorient,6,france
+296,Laval,6,france
+297,Gueugnon,6,france
+298,Nice,6,france
+299,Le Havre,6,france
+300,Nimes,6,france
+301,Sochaux,6,france
+302,Niort,6,france
+303,Angers,6,france
+304,Amiens,6,france
+305,Grenoble,6,france
+306,Istres,6,france
+307,Reims,6,france
+308,Valence,6,france
+309,Clermont,6,france
+310,Rouen,6,france
+311,Besancon,6,france
+312,Brest,6,france
+313,Dijon,6,france
+314,Sete,6,france
+315,Valenciennes,6,france
+316,Libourne,6,france
+317,Tours,6,france
+318,Boulogne,6,france
+319,Vannes,6,france
+320,Arles,6,france
+321,Evian Thonon Gaillard,6,france
+322,Ajaccio GFCO,6,france
+323,CA Bastia,6,france
+324,Orleans,6,france
+325,Bourg Peronnas,6,france
+326,Paris FC,6,france
+327,Red Star,6,france
+328,Quevilly Rouen,6,france
+329,Beziers,6,france
+330,Chambly,6,france
+331,Rodez,6,france
+332,Dunkerque,6,france
+333,Pau FC,6,france
+334,Annecy,6,france
+335,Concarneau,6,france
+336,Charleville,6,france
+337,Louhans-Cuis.,6,france
+338,Mulhouse,6,france
+339,Red Star 93,6,france
+340,Perpignan,6,france
+341,St Brieuc,6,france
+342,Toulon,6,france
+343,Epinal,6,france
+344,Dortmund,7,germany
+345,Hertha,7,germany
+346,Cottbus,7,germany
+347,Leverkusen,7,germany
+348,M'gladbach,7,germany
+349,Bayern Munich,7,germany
+350,Nurnberg,7,germany
+351,Bochum,7,germany
+352,Schalke 04,7,germany
+353,Wolfsburg,7,germany
+354,Stuttgart,7,germany
+355,Kaiserslautern,7,germany
+356,Bielefeld,7,germany
+357,Werder Bremen,7,germany
+358,Hamburg,7,germany
+359,Hannover,7,germany
+360,Munich 1860,7,germany
+361,Hansa Rostock,7,germany
+362,Duisburg,7,germany
+363,Greuther Furth,7,germany
+364,Ein Trier,7,germany
+365,Burghausen,7,germany
+366,Union Berlin,7,germany
+367,Mainz,7,germany
+368,Aachen,7,germany
+369,Freiburg,7,germany
+370,Ahlen,7,germany
+371,Reutlingen,7,germany
+372,Braunschweig,7,germany
+373,Mannheim,7,germany
+374,Ein Frankfurt,7,germany
+375,St Pauli,7,germany
+376,Lubeck,7,germany
+377,Oberhausen,7,germany
+378,Karlsruhe,7,germany
+379,FC Koln,7,germany
+380,Osnabruck,7,germany
+381,Erzgebirge Aue,7,germany
+382,Regensburg,7,germany
+383,Unterhaching,7,germany
+384,Dresden,7,germany
+385,Essen,7,germany
+386,Saarbrucken,7,germany
+387,Erfurt,7,germany
+388,Offenbach,7,germany
+389,Siegen,7,germany
+390,Paderborn,7,germany
+391,CZ Jena,7,germany
+392,Koblenz,7,germany
+393,Augsburg,7,germany
+394,Hoffenheim,7,germany
+395,Wehen,7,germany
+397,Frankfurt FSV,7,germany
+398,Ingolstadt,7,germany
+399,Fortuna Dusseldorf,7,germany
+400,Aalen,7,germany
+401,Sandhausen,7,germany
+402,RB Leipzig,7,germany
+403,Darmstadt,7,germany
+404,Heidenheim,7,germany
+405,Wurzburger Kickers,7,germany
+406,Holstein Kiel,7,germany
+407,Magdeburg,7,germany
+408,Elversberg,7,germany
+409,Preußen Münster,7,germany
+410,Ulm,7,germany
+411,Leipzig,7,germany
+413,Wattenscheid,7,germany
+414,Chemnitz,7,germany
+415,Wuppertaler,7,germany
+416,Homburg,7,germany
+417,F Koln,7,germany
+418,Meppen,7,germany
+419,RW Essen,7,germany
+420,Stuttgarter K,7,germany
+421,TB Berlin,7,germany
+422,Uerdingen,7,germany
+423,Dusseldorf,7,germany
+424,Zwickau,7,germany
+425,FSV Frankfurt,7,germany
+426,Gutersloh,7,germany
+427,Oldenburg,7,germany
+428,Kallithea,8,greece
+429,Egaleo,8,greece
+430,Xanthi,8,greece
+431,PAOK,8,greece
+432,Akratitos,8,greece
+433,Iraklis,8,greece
+434,Kalamaria,8,greece
+435,OFI,8,greece
+436,Panathinaikos,8,greece
+437,Olympiakos,8,greece
+438,Panionios,8,greece
+439,Larisa,8,greece
+440,Atromitos,8,greece
+441,AEK,8,greece
+442,Levadeiakos,8,greece
+443,Ionikos,8,greece
+444,Ergotelis,8,greece
+445,Kerkyra,8,greece
+446,Aris,8,greece
+447,Asteras Tripolis,8,greece
+448,Veria,8,greece
+449,Panthrakikos,8,greece
+450,Panserraikos,8,greece
+451,Thrasyvoulos,8,greece
+452,Giannina,8,greece
+453,Kavala,8,greece
+454,Olympiakos Volou,8,greece
+455,Panetolikos,8,greece
+456,Doxa Dramas,8,greece
+457,Platanias,8,greece
+458,Apollon,8,greece
+459,Kallonis,8,greece
+460,Niki Volos,8,greece
+461,Lamia,8,greece
+462,OFI Crete,8,greece
+463,Volos NFC,8,greece
+464,Kifisia,8,greece
+465,Athens Kallithea,8,greece
+466,Athinaikos,8,greece
+467,Doxa,8,greece
+468,Edessaikos,8,greece
+469,Levadiakos,8,greece
+470,Ethnikos,8,greece
+471,Kalamata,8,greece
+472,Paniliakos,8,greece
+473,Panahaiki,8,greece
+474,Kastoria,8,greece
+475,Heracles,8,greece
+476,Veroia,8,greece
+477,Ethnikos Piraeus,8,greece
+478,Proodeytiki,8,greece
+479,Ethnikos Asteras,8,greece
+480,Eleysina,8,greece
+481,Trikala,8,greece
+482,Drogheda,9,ireland
+483,Shamrock Rovers,9,ireland
+484,Derry City,9,ireland
+485,Bohemians,9,ireland
+486,St. Patricks,9,ireland
+487,Bray,9,ireland
+488,UC Dublin,9,ireland
+489,Cork City,9,ireland
+490,Monaghan,9,ireland
+491,Dundalk,9,ireland
+492,Shelbourne,9,ireland
+493,Sligo Rovers,9,ireland
+494,Longford,9,ireland
+495,Waterford,9,ireland
+496,Limerick,9,ireland
+497,Mervue,9,ireland
+498,Athlone,9,ireland
+499,Galway,9,ireland
+500,Finn Harps,9,ireland
+501,Wexford,9,ireland
+502,Cobh Ramblers,9,ireland
+503,Cabinteely,9,ireland
+504,Treaty United,9,ireland
+505,Bari,10,italy
+506,Verona,10,italy
+507,Napoli,10,italy
+508,Juventus,10,italy
+509,Atalanta,10,italy
+510,Lazio,10,italy
+511,Milan,10,italy
+512,Vicenza,10,italy
+513,Parma,10,italy
+514,Fiorentina,10,italy
+515,Perugia,10,italy
+516,Lecce,10,italy
+517,Reggina,10,italy
+518,Inter,10,italy
+519,Roma,10,italy
+520,Bologna,10,italy
+521,Udinese,10,italy
+522,Brescia,10,italy
+523,Torino,10,italy
+524,Ancona,10,italy
+525,Cagliari,10,italy
+526,Crotone,10,italy
+527,Chievo,10,italy
+528,Genoa,10,italy
+529,Cittadella,10,italy
+530,Piacenza,10,italy
+531,Cosenza,10,italy
+532,Pescara,10,italy
+533,Empoli,10,italy
+534,Pistoiese,10,italy
+535,Monza,10,italy
+536,Venezia,10,italy
+537,Ravenna,10,italy
+538,Salernitana,10,italy
+539,Sampdoria,10,italy
+540,Ternana,10,italy
+541,Siena,10,italy
+542,Treviso,10,italy
+543,Messina,10,italy
+544,Como,10,italy
+545,Palermo,10,italy
+546,Modena,10,italy
+547,Ascoli,10,italy
+548,Catania,10,italy
+549,Triestina,10,italy
+550,Livorno,10,italy
+551,Albinoleffe,10,italy
+552,Avellino,10,italy
+553,Arezzo,10,italy
+554,Catanzaro,10,italy
+555,Cesena,10,italy
+556,Cremonese,10,italy
+557,Mantova,10,italy
+558,Rimini,10,italy
+559,Frosinone,10,italy
+560,Spezia,10,italy
+561,Pisa,10,italy
+562,Grosseto,10,italy
+563,Sassuolo,10,italy
+564,Gallipoli,10,italy
+565,Padova,10,italy
+567,Novara,10,italy
+568,Portogruaro,10,italy
+569,Varese,10,italy
+570,Juve Stabia,10,italy
+571,Gubbio,10,italy
+572,Nocerina,10,italy
+573,Virtus Lanciano,10,italy
+574,Pro Vercelli,10,italy
+575,Latina,10,italy
+576,Trapani,10,italy
+577,Carpi,10,italy
+578,Virtus Entella,10,italy
+579,Benevento,10,italy
+580,Spal,10,italy
+581,Foggia,10,italy
+582,Pordenone,10,italy
+583,Reggiana,10,italy
+584,Alessandria,10,italy
+585,Sudtirol,10,italy
+586,FeralpiSalo,10,italy
+587,Lecco,10,italy
+588,Carrarese,10,italy
+589,Lucchese,10,italy
+590,C. Sangro,10,italy
+591,F. Andria,10,italy
+592,Alzano,10,italy
+593,Savoia,10,italy
+594,Fermana,10,italy
+595,Sparta,11,netherlands
+596,Roda JC,11,netherlands
+597,Graafschap,11,netherlands
+598,PSV Eindhoven,11,netherlands
+599,Feyenoord,11,netherlands
+600,AZ Alkmaar,11,netherlands
+601,NAC Breda,11,netherlands
+602,Waalwijk,11,netherlands
+603,Groningen,11,netherlands
+604,Willem II,11,netherlands
+605,Roosendaal,11,netherlands
+606,Nijmegen,11,netherlands
+607,Utrecht,11,netherlands
+608,Heerenveen,11,netherlands
+609,Vitesse,11,netherlands
+610,Twente,11,netherlands
+611,Ajax,11,netherlands
+612,For Sittard,11,netherlands
+613,Den Bosch,11,netherlands
+614,Zwolle,11,netherlands
+615,Excelsior,11,netherlands
+616,Den Haag,11,netherlands
+617,Volendam,11,netherlands
+619,VVV Venlo,11,netherlands
+620,Roda,11,netherlands
+630,Cambuur,11,netherlands
+631,Go Ahead Eagles,11,netherlands
+632,Dordrecht,11,netherlands
+633,Sparta Rotterdam,11,netherlands
+634,FC Emmen,11,netherlands
+635,Almere City,11,netherlands
+636,Telstar,11,netherlands
+637,MVV Maastricht,11,netherlands
+638,Molde,12,norway
+639,Stromsgodset,12,norway
+640,Honefoss,12,norway
+641,Lillestrom,12,norway
+642,Odd,12,norway
+643,Sogndal,12,norway
+644,Stabaek,12,norway
+645,Aalesund,12,norway
+646,Tromso,12,norway
+647,Fredrikstad,12,norway
+648,Valerenga,12,norway
+649,Haugesund,12,norway
+650,Rosenborg,12,norway
+651,Brann,12,norway
+652,Sandnes,12,norway
+653,Viking,12,norway
+654,Ull/Kisa,12,norway
+655,Sarpsborg 08,12,norway
+656,Start,12,norway
+657,Ranheim,12,norway
+658,Bodo/Glimt,12,norway
+659,Mjondalen,12,norway
+660,Sandefjord,12,norway
+661,Jerv,12,norway
+662,Kristiansund,12,norway
+663,Ham-Kam,12,norway
+664,Kongsvinger,12,norway
+665,HamKam,12,norway
+666,KFUM Oslo,12,norway
+667,Moss,12,norway
+668,Bryne,12,norway
+669,Pogon Szczecin,13,poland
+670,Zaglebie,13,poland
+671,Piast Gliwice,13,poland
+672,Gornik Z.,13,poland
+673,Jagiellonia,13,poland
+674,Podbeskidzie,13,poland
+675,Widzew Lodz,13,poland
+676,Slask Wroclaw,13,poland
+677,Lech Poznan,13,poland
+678,Ruch,13,poland
+679,Wisla,13,poland
+680,GKS Belchatow,13,poland
+681,Legia,13,poland
+682,Korona Kielce,13,poland
+683,Lechia Gdansk,13,poland
+684,Polonia Warszawa,13,poland
+685,Zawisza,13,poland
+686,Cracovia,13,poland
+687,Leczna,13,poland
+688,Termalica B-B.,13,poland
+689,Wisla Plock,13,poland
+690,Arka Gdynia,13,poland
+691,Sandecja Nowy S.,13,poland
+692,Legnica,13,poland
+693,Zaglebie Sosnowiec,13,poland
+694,LKS Lodz,13,poland
+695,Rakow,13,poland
+696,Stal Mielec,13,poland
+697,Warta Poznan,13,poland
+698,Radomiak Radom,13,poland
+699,Gornik Zabrze,13,poland
+700,Ruch Chorzow,13,poland
+701,Puszcza,13,poland
+702,GKS Katowice,13,poland
+703,Motor Lublin,13,poland
+704,Beira Mar,14,portugal
+705,Boavista,14,portugal
+706,Porto,14,portugal
+707,Benfica,14,portugal
+708,Sp Braga,14,portugal
+709,Guimaraes,14,portugal
+710,Alverca,14,portugal
+711,Maritimo,14,portugal
+712,Aves,14,portugal
+713,Belenenses,14,portugal
+714,Gil Vicente,14,portugal
+715,Campomaiorense,14,portugal
+716,Salgueiros,14,portugal
+717,Pacos Ferreira,14,portugal
+718,Sp Lisbon,14,portugal
+719,Farense,14,portugal
+720,Leiria,14,portugal
+721,Est Amadora,14,portugal
+722,Varzim,14,portugal
+723,Setubal,14,portugal
+724,Santa Clara,14,portugal
+725,Academica,14,portugal
+726,Moreirense,14,portugal
+727,Nacional,14,portugal
+728,Rio Ave,14,portugal
+729,Estoril,14,portugal
+730,Penafiel,14,portugal
+731,Naval,14,portugal
+732,Leixoes,14,portugal
+733,Trofense,14,portugal
+734,Olhanense,14,portugal
+735,Portimonense,14,portugal
+736,Feirense ,14,portugal
+738,Arouca,14,portugal
+739,Tondela,14,portugal
+740,Uniao Madeira,14,portugal
+741,Chaves,14,portugal
+742,Famalicao,14,portugal
+743,Vizela,14,portugal
+744,Casa Pia,14,portugal
+745,Estrela,14,portugal
+746,AVS,14,portugal
+747,Desp. Chaves,14,portugal
+748,Tirsense,14,portugal
+749,Madeira,14,portugal
+750,Campomaior,14,portugal
+751,Felgueiras,14,portugal
+752,Leca,14,portugal
+753,Espinho,14,portugal
+754,Pandurii,15,romania
+755,U. Cluj,15,romania
+756,CS Turnu Severin,15,romania
+757,Din. Bucuresti,15,romania
+758,Petrolul,15,romania
+759,Ceahlaul,15,romania
+760,CFR Cluj,15,romania
+761,Gaz Metan Medias,15,romania
+762,Bistrita,15,romania
+763,Astra,15,romania
+764,Poli Iasi,15,romania
+765,Otelul,15,romania
+766,FC Rapid Bucuresti,15,romania
+767,Vaslui,15,romania
+768,Viitorul Constanta,15,romania
+769,FC Brasov,15,romania
+770,FCSB,15,romania
+771,Concordia,15,romania
+772,Poli Timisoara,15,romania
+773,Navodari,15,romania
+774,FC Botosani,15,romania
+775,Corona Brasov,15,romania
+776,U Craiova,15,romania
+777,Targu Mures,15,romania
+778,FC Voluntari,15,romania
+779,Calarasi,15,romania
+780,UTA Arad,15,romania
+781,Daco-Getica Bucuresti,15,romania
+782,Sepsi Sf. Gheorghe,15,romania
+783,Chindia Targoviste,15,romania
+784,FC Hermannstadt,15,romania
+785,Academica Clinceni,15,romania
+786,Mioveni,15,romania
+787,FC Arges,15,romania
+788,Univ. Craiova,15,romania
+789,U Craiova 1948,15,romania
+790,Farul Constanta,15,romania
+791,Gloria Buzau,15,romania
+792,Csikszereda M. Ciuc,15,romania
+793,Unirea Slobozia,15,romania
+794,Metaloglobus Bucharest,15,romania
+795,Dinamo Bucuresti,15,romania
+796,M. Saransk,16,russia
+797,Lokomotiv Moscow,16,russia
+798,CSKA Moscow,16,russia
+799,FK Rostov,16,russia
+800,Volga N. Novgorod,16,russia
+801,Dynamo Moscow,16,russia
+802,Vladikavkaz,16,russia
+803,Spartak Moscow,16,russia
+804,Zenit,16,russia
+805,Amkar,16,russia
+806,Krylya Sovetov,16,russia
+807,Akhmat Grozny,16,russia
+808,FK Anzi Makhackala,16,russia
+809,Kuban,16,russia
+810,Krasnodar,16,russia
+811,Rubin Kazan,16,russia
+812,Spartak Nalchik,16,russia
+813,SKA Khabarovsk,16,russia
+814,Tomsk,16,russia
+815,Ural,16,russia
+816,Ufa,16,russia
+817,T. Moscow,16,russia
+818,Arsenal Tula,16,russia
+819,Tosno,16,russia
+820,Volgar-Astrakhan,16,russia
+821,Orenburg,16,russia
+822,Yenisey,16,russia
+823,Tambov,16,russia
+824,Pari NN,16,russia
+825,Sochi,16,russia
+826,Khimki,16,russia
+827,R. Volgograd,16,russia
+828,Torpedo Moscow,16,russia
+829,Fakel Voronezh,16,russia
+830,Rodina Moscow,16,russia
+831,Baltika,16,russia
+832,Akron Togliatti,16,russia
+833,Dynamo Makhachkala,16,russia
+834,Dunfermline,17,scotland
+835,Aberdeen,17,scotland
+836,Motherwell,17,scotland
+837,Dundee,17,scotland
+838,Rangers,17,scotland
+839,St Johnstone,17,scotland
+840,St Mirren,17,scotland
+841,Kilmarnock,17,scotland
+842,Dundee United,17,scotland
+843,Celtic,17,scotland
+844,Hearts,17,scotland
+845,Hibernian,17,scotland
+846,Ayr,17,scotland
+847,Ross County,17,scotland
+848,Clyde,17,scotland
+849,Falkirk,17,scotland
+850,Inverness C,17,scotland
+851,Airdrie,17,scotland
+852,Morton,17,scotland
+853,Livingston,17,scotland
+854,Raith Rvs,17,scotland
+855,Alloa,17,scotland
+856,Arbroath,17,scotland
+857,Partick,17,scotland
+858,Queens Park,17,scotland
+859,Berwick,17,scotland
+860,Stenhousemuir,17,scotland
+861,Queen of Sth,17,scotland
+862,Stirling,17,scotland
+863,Clydebank,17,scotland
+864,Stranraer,17,scotland
+865,Forfar,17,scotland
+866,Albion Rvs,17,scotland
+867,East Fife,17,scotland
+868,Brechin,17,scotland
+869,Elgin,17,scotland
+870,East Stirling,17,scotland
+871,Cowdenbeath,17,scotland
+872,Hamilton,17,scotland
+873,Dumbarton,17,scotland
+874,Peterhead,17,scotland
+875,Montrose,17,scotland
+876,Airdrie Utd,17,scotland
+877,Gretna,17,scotland
+878,Raith,17,scotland
+879,Annan Athletic,17,scotland
+880,Edinburgh City,17,scotland
+881,Cove Rangers,17,scotland
+882,Kelty Hearts,17,scotland
+883,FC Edinburgh,17,scotland
+884,Bonnyrigg Rose,17,scotland
+885,Spartans,17,scotland
+886,East Kilbride,17,scotland
+887,Barcelona,18,spain
+888,Malaga,18,spain
+889,La Coruna,18,spain
+890,Ath Bilbao,18,spain
+891,Real Madrid,18,spain
+892,Valencia,18,spain
+893,Sociedad,18,spain
+894,Santander,18,spain
+895,Zaragoza,18,spain
+896,Espanol,18,spain
+897,Las Palmas,18,spain
+898,Alaves,18,spain
+899,Mallorca,18,spain
+900,Valladolid,18,spain
+901,Numancia,18,spain
+902,Oviedo,18,spain
+903,Osasuna,18,spain
+904,Celta,18,spain
+905,Villarreal,18,spain
+906,Vallecano,18,spain
+907,Albacete,18,spain
+908,Tenerife,18,spain
+909,Getafe,18,spain
+910,Cordoba,18,spain
+911,Lleida,18,spain
+912,Eibar,18,spain
+913,Compostela,18,spain
+914,Betis,18,spain
+915,Elche,18,spain
+916,Salamanca,18,spain
+917,Jaen,18,spain
+918,Ferrol,18,spain
+919,Leganes,18,spain
+920,Extremadura,18,spain
+921,Levante,18,spain
+922,Ath Madrid,18,spain
+923,Recreativo,18,spain
+924,Badajoz,18,spain
+925,Sevilla,18,spain
+926,Murcia,18,spain
+927,Sp Gijon,18,spain
+928,U.Las Palmas,18,spain
+929,Poli Ejido,18,spain
+930,Burgos,18,spain
+931,Gimnastic,18,spain
+932,Xerez,18,spain
+933,Almeria,18,spain
+934,Terrassa,18,spain
+935,Malaga B,18,spain
+936,Cadiz,18,spain
+937,Ciudad de Murcia,18,spain
+938,Algeciras,18,spain
+939,Pontevedra,18,spain
+940,Lorca,18,spain
+941,Real Madrid B,18,spain
+942,Hercules,18,spain
+943,Castellon,18,spain
+944,Ponferradina,18,spain
+945,Vecindario,18,spain
+946,Granada 74,18,spain
+947,Sevilla B,18,spain
+948,Alicante,18,spain
+949,Girona,18,spain
+950,Huesca,18,spain
+951,Cartagena,18,spain
+952,Real Union,18,spain
+953,Villarreal B,18,spain
+954,Barcelona B,18,spain
+955,Alcorcon,18,spain
+956,Granada,18,spain
+957,Alcoyano,18,spain
+958,Guadalajara,18,spain
+959,Sabadell,18,spain
+960,Mirandes,18,spain
+961,Lugo,18,spain
+962,Llagostera,18,spain
+963,Ath Bilbao B,18,spain
+964,Reus Deportiu,18,spain
+965,UCAM Murcia,18,spain
+966,Leonesa,18,spain
+967,Extremadura UD,18,spain
+968,Rayo Majadahonda,18,spain
+969,Fuenlabrada,18,spain
+970,Logrones,18,spain
+971,Ibiza,18,spain
+972,Sociedad B,18,spain
+973,Amorebieta,18,spain
+974,Andorra,18,spain
+975,Eldense,18,spain
+976,Cultural Leonesa,18,spain
+977,Ceuta,18,spain
+978,Lerida,18,spain
+979,Merida,18,spain
+980,Orense,18,spain
+981,Ath Madrid B,18,spain
+982,Toledo,18,spain
+983,Ecija,18,spain
+984,Villareal,18,spain
+985,Mallorca B,18,spain
+986,Ourense,18,spain
+987,Elfsborg,19,sweden
+988,Djurgarden,19,sweden
+989,GAIS,19,sweden
+990,Hacken,19,sweden
+991,Sundsvall,19,sweden
+992,Kalmar,19,sweden
+993,AIK,19,sweden
+994,Mjallby,19,sweden
+995,Syrianska,19,sweden
+996,Goteborg,19,sweden
+997,Malmo FF,19,sweden
+998,Gefle,19,sweden
+999,Orebro,19,sweden
+1000,Atvidabergs,19,sweden
+1001,Norrkoping,19,sweden
+1002,Helsingborg,19,sweden
+1003,Halmstad,19,sweden
+1004,Brommapojkarna,19,sweden
+1005,Osters,19,sweden
+1006,Falkenbergs,19,sweden
+1007,Ljungskile,19,sweden
+1008,Hammarby,19,sweden
+1009,Sirius,19,sweden
+1010,Jonkopings,19,sweden
+1011,Ostersunds,19,sweden
+1012,AFC Eskilstuna,19,sweden
+1013,Trelleborgs,19,sweden
+1014,Dalkurd,19,sweden
+1015,Brage,19,sweden
+1016,Varberg,19,sweden
+1017,Degerfors,19,sweden
+1018,Varnamo,19,sweden
+1019,Oster,19,sweden
+1020,Vasteras SK,19,sweden
+1021,Landskrona,19,sweden
+1022,Orgryte,19,sweden
+1023,Servette,20,switzerland
+1024,Basel,20,switzerland
+1025,Thun,20,switzerland
+1026,Lausanne,20,switzerland
+1027,Grasshoppers,20,switzerland
+1028,Sion,20,switzerland
+1029,Luzern,20,switzerland
+1030,Zurich,20,switzerland
+1031,St. Gallen,20,switzerland
+1032,Young Boys,20,switzerland
+1033,Aarau,20,switzerland
+1034,Vaduz,20,switzerland
+1035,Lugano,20,switzerland
+1036,Xamax,20,switzerland
+1037,Schaffhausen,20,switzerland
+1038,Winterthur,20,switzerland
+1039,Lausanne Ouchy,20,switzerland
+1040,Yverdon,20,switzerland
+1041,Kocaelispor,21,turkey
+1042,Fenerbahce,21,turkey
+1043,Besiktas,21,turkey
+1044,Yozgatspor,21,turkey
+1045,Bursaspor,21,turkey
+1046,Gaziantepspor,21,turkey
+1047,Erzurumspor,21,turkey
+1048,Trabzonspor,21,turkey
+1049,Genclerbirligi,21,turkey
+1050,Rizespor,21,turkey
+1051,Denizlispor,21,turkey
+1052,Galatasaray,21,turkey
+1053,Istanbulspor,21,turkey
+1054,Adanaspor,21,turkey
+1055,Samsunspor,21,turkey
+1056,Ankaragucu,21,turkey
+1057,Siirt Jet-PA,21,turkey
+1058,Antalyaspor,21,turkey
+1059,Diyarbakirspor,21,turkey
+1060,Goztep,21,turkey
+1061,Malatyaspor,21,turkey
+1062,Altay,21,turkey
+1063,Elazigspor,21,turkey
+1064,Konyaspor,21,turkey
+1065,A. Sebatspor,21,turkey
+1066,Sakaryaspor,21,turkey
+1067,Kayserispor,21,turkey
+1068,Ankaraspor,21,turkey
+1069,Erciyesspor,21,turkey
+1070,Sivasspor,21,turkey
+1071,Manisaspor,21,turkey
+1072,Buyuksehyr,21,turkey
+1073,Kasimpasa,21,turkey
+1074,Oftasspor,21,turkey
+1075,Eskisehirspor,21,turkey
+1076,Hacettepespor,21,turkey
+1077,Bucaspor,21,turkey
+1078,Karabukspor,21,turkey
+1079,Mersin Idman Yurdu,21,turkey
+1080,Orduspor,21,turkey
+1081,Akhisar Belediyespor,21,turkey
+1082,Balikesirspor,21,turkey
+1083,Osmanlispor,21,turkey
+1084,Alanyaspor,21,turkey
+1085,Yeni Malatyaspor,21,turkey
+1086,Erzurum BB,21,turkey
+1087,Gaziantep,21,turkey
+1088,Karagumruk,21,turkey
+1089,Hatayspor,21,turkey
+1090,Ad. Demirspor,21,turkey
+1091,Giresunspor,21,turkey
+1092,Umraniyespor,21,turkey
+1093,Pendikspor,21,turkey
+1094,Eyupspor,21,turkey
+1095,Bodrumspor,21,turkey
+1096,Zeytinburnu,21,turkey
+1097,Antalya,21,turkey
+1098,P. Ofisi,21,turkey
+1099,Vanspor,21,turkey
+1100,Kayseri,21,turkey
+1101,Karsiyaka,21,turkey
+1102,Dardanelspor,21,turkey
+1103,Sariyer,21,turkey
+1104,Sekerspor,21,turkey
+1105,Erzurum,21,turkey
+1146,Botev Plovdiv,23,Bulgaria
+1148,Beroe Stara Zagora,23,Bulgaria
+1149,CSKA Sofia,23,Bulgaria
+1150,Cherno More Varna,23,Bulgaria
+1151,Slavia Sofia,23,Bulgaria
+1153,Levski Sofia,23,Bulgaria
+1154,Ludogorets,23,Bulgaria
+1159,Lokomotiv Plovdiv,23,Bulgaria
+1161,Arda Kardzhali,23,Bulgaria
+1170,FK Dunav Ruse,23,Bulgaria
+1175,FC Lovech Lovech,23,Bulgaria
+1299,Santos,24,International
+1347,Wolverhampton,25,England
+1350,Nottingham Forest,25,England
+1401,Wales,24,International
+1402,England,24,International
+1404,Denmark,24,International
+1406,France,24,International
+1407,Poland,24,International
+1410,Croatia,24,International
+1411,Belgium,24,International
+1412,Germany,24,International
+1414,Spain,24,International
+1418,Portugal,24,International
+1419,Serbia,24,International
+1420,Switzerland,24,International
+1423,Netherlands,24,International
+1427,Iceland,24,International
+1429,Sweden,24,International
+1431,Russia,24,International
+1433,Italy,24,International
+1440,Ireland,24,International
+1448,Scotland,24,International
+1453,Stade Rennais,26,France
+1454,Stade Brestois,26,France
+1456,Olympique Lyonnais,26,France
+1457,Saint-Étienne,26,France
+1462,Athletic Club,24,International
+1465,Borussia Dortmund,24,International
+1467,Qarabağ Ağdam FK,24,International
+1468,SK Slavia Praha,24,International
+1483,Hungary,24,International
+1484,Albania,24,International
+1485,Slovenia,24,International
+1486,Romania,24,International
+1487,Ukraine,24,International
+1488,Slovakia,24,International
+1489,Austria,24,International
+1491,Georgia,24,International
+1492,Czechia,24,International
+1493,Sporting CP,24,International
+1494,Pafos FC,24,International
+1496,Kairat Almaty,24,International
+1497,KF Shkëndija,24,International
+1498,Dynamo Kyiv,24,International
+1499,FC Viktoria Plzeň,24,International
+1500,ŠK Slovan Bratislava,24,International
+1501,Ferencváros TC,24,International
+1502,FK Crvena zvezda,24,International
+1503,Breidablik Kópavogur,24,International
+1504,HNK Rijeka,24,International
+1505,Kuopion Palloseura,24,International
+1506,FC Drita,24,International
+1507,HŠK Zrinjski Mostar,24,International
+1508,RFS,24,International
+1509,Maccabi Tel Aviv,24,International
+1510,FC Noah,24,International
+1511,SS Virtus,24,International
+1512,KF Egnatia,24,International
+1513,FK Žalgiris,24,International
+1514,Dinamo Minsk,24,International
+1515,Linfield FC,24,International
+1516,NK Olimpija Ljubljana,24,International
+1517,Víkingur Gøta,24,International
+1518,FC Milsami Orhei,24,International
+1519,FCI Levadia Tallinn,24,International
+1520,FC Iberia 1999,24,International
+1521,Differdange FC 03,24,International
+1522,The New Saints,24,International
+1523,FK Budućnost Podgorica,24,International
+1524,Shakhtar Donetsk,24,International
+1525,GNK Dinamo Zagreb,24,International
+1526,FK Borac Banja Luka,24,International
+1527,NK Celje,24,International
+1528,FC Petrocub Hîncesti,24,International
+1529,APOEL Nicosia,24,International
+1530,Klaksvíkar Ítróttarfelag,24,International
+1531,UE Santa Coloma,24,International
+1532,FK Partizan,24,International
+1533,FK Panevėžys,24,International
+1534,FC Struga Trim & Lum,24,International
+1535,Dinamo Batumi,24,International
+1536,Pyunik Yerevan,24,International
+1537,KF Ballkani,24,International
+1538,Flora Tallinn,24,International
+1539,FK Dečić Tuzi,24,International
+1540,Víkingur Reykjavík,24,International
+1541,FC Ordabasy,24,International
+1542,Larne FC,24,International
+1543,Sporting Braga,24,International
+1544,Maccabi Haifa,24,International
+1545,Raków Częstochowa,24,International
+1546,FK TSC Bačka Topola,24,International
+1547,SC Dnipro-1,24,International
+1548,Astana,24,International
+1549,BATE Borisov,24,International
+1550,Sheriff Tiraspol,24,International
+1551,BK Häcken,24,International
+1552,Valmiera FC,24,International
+1553,Dinamo Tbilisi,24,International
+1554,Swift Hesperange,24,International
+1555,Urartu,24,International
+1556,Atlètic Club Escaldes,24,International
+1557,SP Tre Penne,24,International
+1558,KF Shkupi,24,International
+1559,NK Maribor,24,International
+1560,F91 Dudelange,24,International
+1561,FK Sutjeska Nikšić,24,International
+1562,FC Tobol,24,International
+1563,KF Tirana,24,International
+1564,Shakhtyor Soligorsk,24,International
+1565,La Fiorita,24,International
+1566,Beşiktaş JK,24,International
+1567,Brøndby IF,24,International
+1568,Omonia Nicosia,24,International
+1569,NŠ Mura,24,International
+1570,Neftçi PFK,24,International
+1571,FC Alashkert,24,International
+1572,CS Fola Esch,24,International
+1573,KF Teuta Durrës,24,International
+1574,Riga FC,24,International
+1575,Valur Reykjavík,24,International
+1576,Connah's Quay Nomads,24,International
+1577,FC Prishtina,24,International
+1578,SS Folgore / Falciano,24,International
+1579,HB Tórshavn,24,International
+1580,Başakşehir FK,24,International
+1581,FK Sarajevo,24,International
+1582,SP Tre Fiori,24,International
+1583,FK Sileks Kratovo,24,International
+1584,KR Reykjavík,24,International
+1585,Europa FC,24,International
+1586,FC Ararat-Armenia,24,International
+1587,FK Sūduva Marijampolė,24,International
+1588,Djurgårdens IF,24,International
+1589,Floriana FC,24,International
+1590,NK Lokomotiva Zagreb,24,International
+1591,Valletta FC,24,International
+1592,Nõmme Kalju,24,International
+1593,FC Feronikeli 74,24,International
+1594,Videoton FC Fehérvár,24,International
+1595,FC Spartak Trnava,24,International
+1596,Hapoel Be'er Sheva,24,International
+1597,FK Kukësi,24,International
+1598,Spartaks,24,International
+1599,Crusaders FC,24,International
+1600,FC Torpedo Kutaisi,24,International
+1601,Budapest Honvéd FC,24,International
+1602,FK Vardar Skopje,24,International
+1603,FH Hafnarfjörður,24,International
+1604,FC Samtredia,24,International
+1605,MŠK Žilina,24,International
+1606,KF Trepça '89,24,International
+1607,FC Infonet Tallinn,24,International
+1608,AS Trenčín,24,International
+1609,FK Liepaja,24,International
+1610,IFK Norrköping,24,International
+1611,OFK Titograd Podgorica,24,International
+1612,B36 Tórshavn,24,International
+1613,KF Skënderbeu,24,International
+1614,FK Rudar Pljevlja,24,International
+1615,Stjarnan Garðabær,24,International
+1616,FK Ventspils,24,International
+1617,FC Dila Gori,24,International
+1618,Dnipro,24,International
+1619,AaB,24,International
+1620,FK Rabotnički Skopje,24,International
+1621,St. Patrick's Athletic,24,International
+1622,Debreceni VSC,24,International
+1623,FK Aktobe,24,International
+1624,AEL Limassol,24,International
+1625,Grasshopper Club Zürich,24,International
+1626,Cliftonville FC,24,International
+1627,Shakhter Karagandy,24,International
+1628,Paços de Ferreira,24,International
+1629,FC Metalist Kharkiv,24,International
+1630,Birkirkara FC,24,International
+1631,FC Shirak Gyumri,24,International
+1632,Ekranas Panevezys,24,International
+1633,FC Daugava,24,International
+1634,ETO FC Győr,24,International
+1635,EB/Streymur,24,International
+1636,FK Željezničar,24,International
+1637,FC Lusitanos,24,International
+1638,Helsingborgs IF,24,International
+1639,Hapoel Ironi Kiryat Shmona,24,International
+1640,Śląsk Wrocław,24,International
+1641,FC Slovan Liberec,24,International
+1642,FC Ulisses Yerevan,24,International
+1643,FC Zestafoni,24,International
+1644,SK Sigma Olomouc,24,International
+1645,Baník Ostrava,24,International
+1646,Sabah FK,24,International
+1647,Paksi FC,24,International
+1648,Heart of Midlothian,24,International
+1649,Wisła Kraków,24,International
+1650,FC Kryvbas Kryvyi Rih,24,International
+1651,MFK Ružomberok,24,International
+1652,FC Corvinul Hunedoara,24,International
+1653,Zirə FK,24,International
+1654,KF Llapi,24,International
+1655,FK Vojvodina,24,International
+1656,Maccabi Petach Tikva,24,International
+1657,Zoria Luhansk,24,International
+1658,FK Čukarički,24,International
+1659,1. FC Slovácko,24,International
+1660,FK Jablonec,24,International
+1661,Anorthosis Famagusta,24,International
+1662,FC Locomotive Tbilisi,24,International
+1663,HNK Hajduk Split,24,International
+1664,Desna Chernihiv,24,International
+1665,DAC 1904,24,International
+1666,Kolos Kovalivka,24,International
+1667,Coleraine FC,24,International
+1668,NK Osijek,24,International
+1669,Sønderjyske Fodbold,24,International
+1670,FK Riteriai,24,International
+1671,IFK Göteborg,24,International
+1672,KF Laçi,24,International
+1673,Bala Town,24,International
+1674,FC Sfintul Gheorghe,24,International
+1675,AGF,24,International
+1676,FK Iskra Danilovgrad,24,International
+1677,Glentoran FC,24,International
+1678,NSÍ Runavík,24,International
+1679,Progrès Niederkorn,24,International
+1680,FC Kaysar,24,International
+1681,FK Renova,24,International
+1682,SC Gjilani,24,International
+1683,FK Zeta Golubovci,24,International
+1684,FC Dinamo-Auto,24,International
+1685,Beitar Jerusalem,24,International
+1686,Union Titus Petange,24,International
+1687,Sumqayıt FK,24,International
+1688,Bohemian FC,24,International
+1689,Şamaxı FK,24,International
+1690,Paide Linnameeskond,24,International
+1691,Universitatea Craiova,24,International
+1692,Puskás Akadémia,24,International
+1693,Sirens FC,24,International
+1694,UE Engordany,24,International
+1695,St Joseph's FC,24,International
+1696,Barry Town,24,International
+1697,Oleksandria,24,International
+1698,Vitória SC,24,International
+1699,Bnei Yehuda Tel Aviv,24,International
+1700,Mladá Boleslav,24,International
+1701,Mariupol,24,International
+1702,NK Domžale,24,International
+1703,KS Lechia Gdańsk,24,International
+1704,Gżira United FC,24,International
+1705,Chikhura Sachkhere,24,International
+1706,Jeunesse Esch,24,International
+1707,Qəbələ FK,24,International
+1708,Vitebsk,24,International
+1709,Narva Trans,24,International
+1710,FK Radnik Bijeljina,24,International
+1711,Balzan F.C.,24,International
+1712,FK Radnički Niš,24,International
+1713,Ballymena United,24,International
+1714,Makedonija Gjorce Petrov,24,International
+1715,NK Široki Brijeg,24,International
+1716,Səbail FK,24,International
+1717,RoPS,24,International
+1718,CSF Speranța Nisporeni,24,International
+1719,AP Brera Strumica,24,International
+1720,UE Sant Julià,24,International
+1721,Akhisarspor,24,International
+1722,Vorskla Poltava,24,International
+1723,FK Spartak Subotica,24,International
+1724,Hapoel Haifa,24,International
+1725,Újpest,24,International
+1726,Asteras Aktor,24,International
+1727,Rudar Velenje,24,International
+1728,FC Gandzasar,24,International
+1729,Glenavon,24,International
+1730,ÍBV Vestmannaeyjar,24,International
+1731,Zaria Bălți,24,International
+1732,Stumbras Kaunas,24,International
+1733,Luftëtari Gjirokastër,24,International
+1734,Racing FC Union Luxembourg,24,International
+1735,Irtysh Pavlodar,24,International
+1736,Cefn Druids,24,International
+1737,FC Zlín,24,International
+1739,CS Marítimo,24,International
+1740,Olimpik Donetsk,24,International
+1741,Odds BK,24,International
+1742,ND Gorica,24,International
+1743,Vasas,24,International
+1744,FK Pelister Bitola,24,International
+1745,FS Jelgava,24,International
+1746,Atlantas Klaipėda,24,International
+1747,FK Mladost Lučani,24,International
+1748,Bangor City,24,International
+1749,Dacia Chișinău,24,International
+1750,Zagłębie Lubin,24,International
+1751,Torpedo-BelAZ Zhodino,24,International
+1752,FC Zimbru Chişinău,24,International
+1753,ACSM Politehnica Iași,24,International
+1754,MTK Budapest,24,International
+1755,Kəpəz PFK,24,International
+1756,Stabæk Fotball,24,International
+1757,FK Bokelj Kotor,24,International
+1758,Llandudno FC,24,International
+1759,Spartak Myjava,24,International
+1760,FK Sloboda Tuzla,24,International
+1761,B-SAD,24,International
+1762,ASA Târgu Mureş,24,International
+1763,University College Dublin,24,International
+1764,FC Koper,24,International
+1765,Newtown AFC,24,International
+1766,Skonto Riga,24,International
+1767,Olimpik Sarajevo,24,International
+1768,Pakruojis,24,International
+1769,AC Juvenes / Dogana,24,International
+1770,FK Tskhinvali,24,International
+1771,Saxan Ceadir Lunga,24,International
+1772,Sillamäe Kalev,24,International
+1773,Airbus UK Broughton,24,International
+1774,RNK Split,24,International
+1775,Ermis Aradippou,24,International
+1776,Diósgyőri VTK,24,International
+1777,Chornomorets Odesa,24,International
+1778,SKN St. Pölten,24,International
+1779,FK Metalurg Skopje,24,International
+1780,Neman Grodno,24,International
+1781,Tromsø IL,24,International
+1782,Flamurtari FC,24,International
+1783,FC Košice,24,International
+1784,Hapoel Tel Aviv,24,International
+1785,GFK Jagodina,24,International
+1786,Aberystwyth Town,24,International
+1787,ÍF Fuglafjørdur,24,International
+1788,FK Banga Gargždai,24,International
+1789,FK Čelik,24,International
+1790,AC Libertas,24,International
+1791,Sliema Wanderers,24,International
+1792,FC Veris,24,International
+1793,FK Lovćen,24,International
+1794,FC Mika,24,International
+1795,Horizont Turnovo,24,International
+1796,Fram Reykjavík,24,International
+1797,FC Tiraspol,24,International
+1798,FK Daugava Riga,24,International
+1799,Sioni Bolnisi,24,International
+1800,Anzhi Makhachkala,24,International
+1801,FC Minsk,24,International
+1802,Hapoel Ramat Gan Givataim,24,International
+1803,Metalurh Donetsk,24,International
+1804,AO Xanthis,24,International
+1805,Hødd IL,24,International
+1806,Xəzər Lənkəran FK,24,International
+1807,FK Senica,24,International
+1808,Prestatyn Town,24,International
+1809,Turun Palloseura,24,International
+1810,FK Teteks,24,International
+1811,Liepajas Metalurgs,24,International
+1812,Académica Coimbra,24,International
+1813,Gomel,24,International
+1814,NK Slaven Belupo,24,International
+1815,Aalesunds FK,24,International
+1816,Þór Akureyri,24,International
+1817,Maccabi Netanya,24,International
+1818,FC Rustavi,24,International
+1819,Naftan Novopolotsk,24,International
+1820,Portadown FC,24,International
+1821,Llanelli AFC,24,International
+1822,USV Eschen-Mauren,24,International
+1823,FK Baku,24,International
+1824,CS Grevenmacher,24,International
+1825,Zhetysu Taldykorgan,24,International
+1826,FK Siauliai,24,International
+1827,FC Lausanne-Sport,24,International
+1828,Polissya Zhytomyr,24,International
+1829,Dinamo City,24,International
+1830,Araz Naxçıvan,24,International
+1831,Dungannon Swifts,24,International
+1832,FK Radnički 1923,24,International
+1833,KF Vllaznia,24,International
+1834,Una Strassen,24,International
+1835,FC Universitatea Cluj,24,International
+1836,KA Akureyri,24,International
+1837,NK Varaždin,24,International
+1838,FK Novi Pazar,24,International
+1839,FC Spaeri,24,International
+1840,FC Malisheva,24,International
+1841,FC Hegelmann,24,International
+1842,FK Auda,24,International
+1843,BFC Daugavpils,24,International
+1844,FC Bruno's Magpies,24,International
+1845,Haverfordwest County AFC,24,International
+1846,Penybont,24,International
+1847,FK Mornar Bar,24,International
+1848,NK Bravo,24,International
+1849,FK Transinvest,24,International
+1850,Caernarfon Town,24,International
+1851,Tikveš Kavadarci,24,International
+1852,Marsaxlokk FC,24,International
+1853,Tallinna Kalev,24,International
+1854,FK Velež Mostar,24,International
+1855,Šiauliai FA,24,International
+1856,Sepsi OSK,24,International
+1857,Adana Demirspor,24,International
+1858,Dukagjini,24,International
+1859,Zalaegerszegi TE,24,International
+1860,Kecskemét TE,24,International
+1861,SS Cosmos,24,International
+1862,Kisvárda FC,24,International
+1863,FC Kyzylzhar,24,International
+1864,FK Tuzla City,24,International
+1865,FC Ararat,24,International
+1866,Ashdod SC,24,International
+1867,Vålerenga IF,24,International
+1868,FC Gagra,24,International
+1869,Mons Calpe,24,International
+1870,Mosta FC,24,International
+1871,Türkiye,24,International
+1872,North Macedonia,24,International
+1873,Finland,24,International

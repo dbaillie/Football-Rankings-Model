@@ -1,7 +1,15 @@
 .databricks
 
-# --- Generated data (rebuild with scripts; do not commit) ---
-output/
+# --- Generated data (rebuild with scripts) ---
+# Ignore output tree except pinned europe files shipped for Render (weekly CSV is Git LFS).
+/output/
+!/output/europe/
+/output/europe/*
+!/output/europe/europe_teams.csv
+!/output/europe/europe_ratings.csv
+!/output/europe/europe_match_results.csv
+!/output/europe/europe_weekly_ratings.csv
+!/output/europe/calibration_summary.json
 
 # --- Python ---
 __pycache__/

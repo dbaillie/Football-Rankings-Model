@@ -6,7 +6,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-OUTPUT_EUROPE_DIR = Path(__file__).resolve().parents[2] / "output" / "europe"
+from .data_service import OUTPUT_DIR
+
+OUTPUT_EUROPE_DIR = OUTPUT_DIR
 _CALIBRATION_JSON = OUTPUT_EUROPE_DIR / "calibration_summary.json"
 
 _mt_seen: float | None = None

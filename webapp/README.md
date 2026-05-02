@@ -127,7 +127,21 @@ The **Contact me** form POSTs to `/api/contact` and sends mail over SMTP. Instal
 
 ## Hosting (Render + Vercel)
 
-- **Data:** `output/europe/` is gitignored. The API reads CSVs from that path at runtime. You must ship those files to the host (upload step, persistent disk, artifact, etc.); an empty deploy will not serve real ratings.
+- **Data (Render will crash without this):** The API expects these files on the server — same filenames as locally under `output/europe/`:
+
+  `europe_teams.csv`, `europe_weekly_ratings.csv`, `europe_ratings.csv`, `europe_match_results.csv`
+
+  Optional tab: `calibration_summary.json` (from `scripts/analyse_europe_calibration.py`).
+
+  `.gitignore` excludes `output/`, so **GitHub clones do not include them** unless you deliberately add them. Easiest MVP: from repo root,
+
+  ```bash
+  git add -f output/europe/europe_teams.csv output/europe/europe_weekly_ratings.csv output/europe/europe_ratings.csv output/europe/europe_match_results.csv
+  ```
+
+  (add `calibration_summary.json` the same way if you want that page live), commit, push, redeploy Render. If GitHub rejects a file for being **too large** (~100 MB limit per file), use a different strategy (persistent disk + upload, Private asset URL in build, etc.) instead.
+
+  Alternate: set **`FOOTBALL_OUTPUT_EUROPE_DIR`** on Render to an **absolute path** where you placed those CSVs (e.g. a mounted persistent disk directory).
 - **Backend (Render):** Use the repository root as the service root. Start command:
 
   `uvicorn webapp.backend.main:app --host 0.0.0.0 --port $PORT`
