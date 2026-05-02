@@ -22,10 +22,13 @@ from datetime import datetime
 import json
 import sys
 
-# Import the Glicko engisne
-sys.path.append('libs')
+# Import the Glicko engine and GCAM post-hoc layer
+sys.path.append("libs")
 from glicko_engine.core import run_glicko2, GLICKO2_SCALE, weeks_between
 from glicko_engine.outputs import state_to_ratings_df, snapshots_to_df
+from gcam.config import GCAMConfig
+from gcam.football import fact_table_to_weighted_matches
+from gcam.pipeline import build_gcam_diagnostics, run_posthoc_gcam
 
 # Analytical boundary:
 # Weeks before this are used as warm-up only (run-in) and are excluded from output files.
@@ -35,6 +38,25 @@ ANALYTICAL_START_DATE = pd.Timestamp("2005-07-01")
 # If a team is absent this long, treat return as a new entrant and drop prior history segment.
 RESET_AFTER_INACTIVE_WEEKS = 104
 UEFA_LEAGUE_CODES = frozenset({"UCL", "UEL", "UECL", "EURO"})
+
+GCAM_MERGE_INTO_FINAL = (
+    "effective_connectivity",
+    "direct_connectivity",
+    "community_connectivity",
+    "structural_rd",
+    "total_rd",
+    "trust_factor",
+    "baseline_rating",
+    "adjusted_rating",
+    "power_score",
+    "entropy",
+    "normalized_entropy",
+    "volume_trust",
+    "n_interactions",
+    "n_distinct_opponents",
+    "n_distinct_opponent_communities",
+    "primary_community",
+)
 
 
 def parse_match_dates(series: pd.Series) -> pd.Series:
@@ -234,6 +256,34 @@ def run_data_model(output_root: Path):
         print("Prerequisite data found.")
 
 
+def _load_gcam_config_override(path_raw: str | None) -> tuple[GCAMConfig, dict]:
+    """
+    Build GCAMConfig from optional JSON override.
+    Supports either:
+      1) direct GCAMConfig-like dict
+      2) optimiser output wrapper containing "best_gcam_config"
+    """
+    if not path_raw:
+        return GCAMConfig(), {}
+    p = Path(path_raw)
+    if not p.is_absolute():
+        p = (Path.cwd() / p).resolve()
+    if not p.exists():
+        raise FileNotFoundError(f"GCAM config override file not found: {p}")
+    payload = json.loads(p.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"GCAM override JSON must be an object: {p}")
+    if "best_gcam_config" in payload and isinstance(payload["best_gcam_config"], dict):
+        cfg_data = dict(payload["best_gcam_config"])
+    else:
+        cfg_data = dict(payload)
+    valid_fields = set(GCAMConfig.__dataclass_fields__.keys())
+    cleaned = {k: v for k, v in cfg_data.items() if k in valid_fields}
+    unknown = sorted(set(cfg_data.keys()) - valid_fields)
+    cfg = GCAMConfig(**cleaned)
+    return cfg, {"source": str(p), "unknown_keys_ignored": unknown}
+
+
 def _parse_cli_args():
     p = argparse.ArgumentParser(description="Europe-wide Glicko-2 ratings from resolved fact table.")
     p.add_argument(
@@ -241,6 +291,15 @@ def _parse_cli_args():
         type=str,
         default="output",
         help="Directory containing fact_result_simple_resolved.csv, dim_club_updated.csv, dim_country_updated.csv (default: output)",
+    )
+    p.add_argument(
+        "--gcam-config",
+        type=str,
+        default=None,
+        help=(
+            "Optional GCAM override JSON. Can be direct GCAMConfig fields or an optimiser file "
+            "containing best_gcam_config."
+        ),
     )
     return p.parse_args()
 
@@ -371,6 +430,43 @@ def main():
             (fact_df['yyyyww'] >= ANALYTICAL_START_WEEK) &
             (fact_df['match_date'] >= ANALYTICAL_START_DATE)
         ].copy()
+
+        # GCAM post-hoc layer (evidence quality / global comparability; raw Glicko remains in rating/rd)
+        print("\nApplying GCAM connectivity and trust-adjusted ratings...")
+        id_to_country_name = {
+            int(t): str(c) if pd.notna(c) else "unknown"
+            for t, c in zip(teams_df["team_id"], teams_df["country_name"])
+        }
+        gcam_cfg, gcam_meta = _load_gcam_config_override(args.gcam_config)
+        if gcam_meta:
+            print(f"  GCAM override loaded from: {gcam_meta.get('source')}")
+            bad = gcam_meta.get("unknown_keys_ignored") or []
+            if bad:
+                print(f"  GCAM override ignored unknown keys: {', '.join(bad)}")
+        weighted_matches = fact_table_to_weighted_matches(fact_df, id_to_country_name, gcam_cfg)
+        weekly_ratings, gcam_community_weekly = run_posthoc_gcam(
+            weekly_ratings,
+            weighted_matches,
+            gcam_cfg,
+        )
+        weekly_ratings["primary_community"] = weekly_ratings["primary_community"].fillna("")
+        if not gcam_community_weekly.empty:
+            gcam_community_weekly.to_csv(output_dir / "europe_gcam_community_weekly.csv", index=False)
+        diag_payload = build_gcam_diagnostics(
+            weekly_ratings,
+            {int(t): str(n) for t, n in zip(teams_df["team_id"], teams_df["team_name"])},
+        )
+        if diag_payload:
+            with open(output_dir / "europe_gcam_diagnostics.json", "w", encoding="utf-8") as gf:
+                json.dump(diag_payload, gf, indent=2)
+
+        last_w = int(analytical_weeks[-1])
+        merge_cols = [c for c in GCAM_MERGE_INTO_FINAL if c in weekly_ratings.columns]
+        if merge_cols:
+            snap_gcam = weekly_ratings.loc[weekly_ratings["week"] == last_w, ["pid"] + merge_cols].drop_duplicates(
+                subset=["pid"]
+            )
+            final_ratings = final_ratings.merge(snap_gcam, on="pid", how="left")
         
         # Build pre/post rating lookup from snapshots
         # week_snapshots contains state after each week's games

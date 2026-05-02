@@ -452,6 +452,17 @@ function InfoPage({ navigate }) {
       </div>
 
       <div className="card">
+        <h2>Global evidence layer (GCAM)</h2>
+        <p className="small" style={{ marginBottom: 0 }}>
+          After Glicko-2, an extra <strong>GCAM</strong> step summarises how broadly each club&apos;s results connect
+          across leagues and competitions (<strong>connectivity</strong>), adds <strong>structural uncertainty</strong>{" "}
+          when evidence is mostly locally clustered, and computes a <strong>trust-adjusted strength</strong> curve.
+          Raw Glicko numbers stay in the dataset as the direct strength estimate; charts default to the adjusted curve
+          when present so rankings reflect both skill and <strong>global comparability of evidence</strong>.
+        </p>
+      </div>
+
+      <div className="card">
         <h2>Using the site</h2>
         <ul className="small info-list">
           <li>
@@ -1522,6 +1533,9 @@ function App() {
     margin: { l: 50, r: 20, t: 24, b: 40 },
   };
 
+  const teamStrengthKey =
+    teamSeries.length && teamSeries[0].adjusted_rating != null ? "adjusted_rating" : "rating";
+
   const teamPlotLayout = {
     font: { color: THEME.text },
     paper_bgcolor: THEME.plotPaper,
@@ -1541,7 +1555,10 @@ function App() {
       linecolor: "#334155",
     },
     yaxis: {
-      title: { text: "Rating", font: { color: THEME.muted, size: 12 } },
+      title: {
+        text: teamStrengthKey === "adjusted_rating" ? "Adjusted strength (GCAM)" : "Rating",
+        font: { color: THEME.muted, size: 12 },
+      },
       gridcolor: "#334155",
       zerolinecolor: "#334155",
       tickfont: { color: THEME.muted, size: 11 },
@@ -1554,7 +1571,7 @@ function App() {
   const teamTrendData = [
     {
       x: teamSeries.map((d) => d.week_date),
-      y: teamSeries.map((d) => d.rating),
+      y: teamSeries.map((d) => Number(d[teamStrengthKey] ?? d.rating)),
       mode: "lines",
       type: "scatter",
       name: selectedTeam ? selectedTeam.team_name : "Team",
@@ -2041,8 +2058,8 @@ function App() {
                   <th>#</th>
                   <th>Team</th>
                   <th>Country</th>
-                  <th>Rating</th>
-                  <th>RD</th>
+                  <th>{topSnapshot.some((r) => r.adjusted_rating != null) ? "Strength (adj.)" : "Rating"}</th>
+                  <th>{topSnapshot.some((r) => r.total_rd != null) ? "RD (total)" : "RD"}</th>
                 </tr>
               </thead>
               <tbody>
@@ -2066,8 +2083,10 @@ function App() {
                     </td>
                     <td>{row.team_name}</td>
                     <td>{formatCountryDisplay(row.country_name)}</td>
-                    <td className="rating-strong">{row.rating.toFixed(1)}</td>
-                    <td>{row.rd.toFixed(1)}</td>
+                    <td className="rating-strong">
+                      {(row.adjusted_rating != null ? Number(row.adjusted_rating) : Number(row.rating)).toFixed(1)}
+                    </td>
+                    <td>{(row.total_rd != null ? Number(row.total_rd) : Number(row.rd)).toFixed(1)}</td>
                   </tr>
                 ))}
               </tbody>

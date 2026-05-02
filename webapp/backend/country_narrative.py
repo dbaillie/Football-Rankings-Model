@@ -15,8 +15,10 @@ from .data_service import (
     filter_weekly_for_narrative_ladder,
     get_country_timeseries,
     get_country_top_n_timeseries,
+    ladder_sort_column,
     load_weekly_ratings,
     narrative_ladder_week_allowlist,
+    strength_chart_column,
     visibility_eligible_team_ids,
 )
 
@@ -34,7 +36,8 @@ def _continental_top_presence(
         return {}, 0
 
     eu = filter_weekly_for_narrative_ladder(eu)
-    eu = eu.sort_values(["week", "rating", "pid"], ascending=[True, False, True]).copy()
+    rk = ladder_sort_column(eu)
+    eu = eu.sort_values(["week", rk, "pid"], ascending=[True, False, True]).copy()
     eu["eu_rank"] = eu.groupby("week", sort=False).cumcount() + 1
 
     cc_mask = eu["country_name"].str.lower() == country_slug.strip().lower()
@@ -151,6 +154,7 @@ def _club_highlights_for_country(country_slug: str) -> tuple[str, dict[str, Any]
         return "", out_facts
 
     cc = cc.sort_values(["pid", "week"])
+    rk = strength_chart_column(cc)
     pid_to_name: dict[int, str] = {}
     for pid, grp in cc.groupby("pid", sort=False):
         pid_to_name[int(pid)] = str(grp.iloc[0]["team_name"]).strip()
@@ -160,7 +164,7 @@ def _club_highlights_for_country(country_slug: str) -> tuple[str, dict[str, Any]
         grp = grp.sort_values("week")
         if len(grp) < 2:
             continue
-        delta = float(grp.iloc[-1]["rating"]) - float(grp.iloc[-2]["rating"])
+        delta = float(grp.iloc[-1][rk]) - float(grp.iloc[-2][rk])
         cand = (delta, int(pid), pid_to_name[int(pid)])
         if wow_best is None:
             wow_best = cand
@@ -172,7 +176,7 @@ def _club_highlights_for_country(country_slug: str) -> tuple[str, dict[str, Any]
     peaks: list[tuple[float, int, str]] = []
     means: list[tuple[float, int, str]] = []
     for pid, grp in cc.groupby("pid", sort=False):
-        r = grp["rating"].astype(float)
+        r = grp[rk].astype(float)
         peaks.append((float(r.max()), int(pid), pid_to_name[int(pid)]))
         means.append((float(r.mean()), int(pid), pid_to_name[int(pid)]))
 
@@ -181,7 +185,7 @@ def _club_highlights_for_country(country_slug: str) -> tuple[str, dict[str, Any]
 
     leader_counts: dict[int, int] = {}
     for _, sub in cc.groupby("week", sort=True):
-        sub = sub.sort_values(["rating", "pid"], ascending=[False, True])
+        sub = sub.sort_values([rk, "pid"], ascending=[False, True])
         if sub.empty:
             continue
         lid = int(sub.iloc[0]["pid"])

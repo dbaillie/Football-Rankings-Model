@@ -37,6 +37,26 @@ NARRATIVE_LADDER_DROP_FIRST_N_WEEKS = max(
 )
 
 
+def ladder_sort_column(weekly: pd.DataFrame) -> str:
+    """Column to rank clubs by when GCAM outputs are present (power score > adjusted > raw Glicko)."""
+    if weekly.empty:
+        return "rating"
+    if "power_score" in weekly.columns and weekly["power_score"].notna().any():
+        return "power_score"
+    if "adjusted_rating" in weekly.columns and weekly["adjusted_rating"].notna().any():
+        return "adjusted_rating"
+    return "rating"
+
+
+def strength_chart_column(weekly: pd.DataFrame) -> str:
+    """Time-series strength curve: adjusted rating when calibrated, else raw Glicko."""
+    if weekly.empty:
+        return "rating"
+    if "adjusted_rating" in weekly.columns and weekly["adjusted_rating"].notna().any():
+        return "adjusted_rating"
+    return "rating"
+
+
 def narrative_ladder_week_allowlist(weekly: pd.DataFrame) -> frozenset[int] | None:
     """
     Week ids to KEEP for ladder statistics. Returns None if no warmup trim is applied
@@ -246,6 +266,17 @@ def get_team_timeseries(team_id: int) -> list[dict[str, Any]]:
     if team_data.empty:
         return []
     columns = ["week", "week_date", "rating", "rd", "sigma", "rating_change", "rating_change_pct"]
+    for extra in (
+        "adjusted_rating",
+        "total_rd",
+        "structural_rd",
+        "trust_factor",
+        "effective_connectivity",
+        "power_score",
+        "baseline_rating",
+    ):
+        if extra in team_data.columns:
+            columns.append(extra)
     return team_data[columns].to_dict(orient="records")
 
 
@@ -255,16 +286,14 @@ def get_country_timeseries(country: str) -> list[dict[str, Any]]:
     if country_data.empty:
         return []
 
-    aggregated = (
-        country_data.groupby(["week", "week_date"], as_index=False)
-        .agg(
-            average_rating=("rating", "mean"),
-            top_rating=("rating", "max"),
-            bottom_rating=("rating", "min"),
-            active_teams=("pid", "nunique"),
-        )
-        .sort_values("week")
-    )
+    mean_col = strength_chart_column(country_data)
+    agg_kw: dict[str, tuple[str, str]] = {
+        "average_rating": (mean_col, "mean"),
+        "top_rating": (mean_col, "max"),
+        "bottom_rating": (mean_col, "min"),
+        "active_teams": ("pid", "nunique"),
+    }
+    aggregated = country_data.groupby(["week", "week_date"], as_index=False).agg(**agg_kw).sort_values("week")
     return aggregated.to_dict(orient="records")
 
 
@@ -279,13 +308,15 @@ def get_country_top_n_timeseries(country: str, n: int = 5) -> dict[str, Any]:
     if country_data.empty:
         return {"teams": []}
 
+    rank_col = ladder_sort_column(country_data)
     latest_week = int(country_data["week"].max())
     latest_slice = country_data[country_data["week"] == latest_week].sort_values(
-        "rating", ascending=False
+        rank_col, ascending=False
     )
     top_pids = latest_slice.head(n)["pid"].astype(int).tolist()
 
     teams_df = load_teams()
+    chart_col = strength_chart_column(country_data)
     teams_out: list[dict[str, Any]] = []
     for pid in top_pids:
         sub = country_data[country_data["pid"] == pid].sort_values("week")
@@ -295,7 +326,11 @@ def get_country_top_n_timeseries(country: str, n: int = 5) -> dict[str, Any]:
             if not name_row.empty
             else str(sub.iloc[0]["team_name"])
         )
-        series = sub[["week_date", "rating"]].to_dict(orient="records")
+        series = (
+            sub[["week_date", chart_col]]
+            .rename(columns={chart_col: "rating"})
+            .to_dict(orient="records")
+        )
         teams_out.append({"pid": int(pid), "team_name": team_name, "series": series})
 
     return {"teams": teams_out}
@@ -477,8 +512,11 @@ def get_latest_snapshot(top_n: int = 25) -> list[dict[str, Any]]:
     latest = latest[~(is_international_country | is_international_name)]
     eligible = visibility_eligible_team_ids()
     latest = latest[latest["pid"].isin(eligible)]
-    latest = latest.sort_values("rating", ascending=False).head(top_n)
-    return latest[["pid", "team_name", "country_name", "rating", "rd", "week"]].to_dict(orient="records")
+    rank_col = ladder_sort_column(latest)
+    latest = latest.sort_values(rank_col, ascending=False).head(top_n)
+    base_cols = ["pid", "team_name", "country_name", "rating", "rd", "week"]
+    extra = [c for c in ("adjusted_rating", "total_rd", "trust_factor", "effective_connectivity", "power_score") if c in latest.columns]
+    return latest[base_cols + extra].to_dict(orient="records")
 
 
 def get_country_summaries() -> list[dict[str, Any]]:
@@ -504,21 +542,22 @@ def get_country_summaries() -> list[dict[str, Any]]:
     if latest.empty:
         return []
 
+    mean_col = ladder_sort_column(latest)
     country_stats = (
         latest.groupby("country_name", as_index=False)
         .agg(
-            average_rating=("rating", "mean"),
-            top_rating=("rating", "max"),
+            average_rating=(mean_col, "mean"),
+            top_rating=(mean_col, "max"),
             active_teams=("pid", "nunique"),
         )
         .sort_values("average_rating", ascending=False)
     )
 
     top_team_rows = (
-        latest.sort_values(["country_name", "rating"], ascending=[True, False])
+        latest.sort_values(["country_name", mean_col], ascending=[True, False])
         .groupby("country_name", as_index=False)
-        .first()[["country_name", "team_name", "rating"]]
-        .rename(columns={"team_name": "top_team_name", "rating": "top_team_rating"})
+        .first()[["country_name", "team_name", mean_col]]
+        .rename(columns={"team_name": "top_team_name", mean_col: "top_team_rating"})
     )
 
     merged = country_stats.merge(top_team_rows, on="country_name", how="left")
