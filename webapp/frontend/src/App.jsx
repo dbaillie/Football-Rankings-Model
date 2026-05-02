@@ -1,4 +1,19 @@
-const { useEffect, useLayoutEffect, useMemo, useState } = React;
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import Plotly from "plotly.js-dist-min";
+
+function apiBaseUrl() {
+  const v =
+    typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_BASE_URL !== undefined
+      ? String(import.meta.env.VITE_API_BASE_URL ?? "").trim()
+      : "";
+  return v.replace(/\/$/, "");
+}
+
+function apiUrl(path) {
+  const base = apiBaseUrl();
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return base ? `${base}${p}` : p;
+}
 
 /** Matches dark theme tokens in index.html */
 const THEME = {
@@ -104,8 +119,9 @@ async function getJson(url, options = {}) {
     timeoutMs != null && timeoutMs > 0
       ? setTimeout(() => ctrl.abort(), timeoutMs)
       : null;
+  const resolved = /^https?:\/\//i.test(url) ? url : apiUrl(url);
   try {
-    const response = await fetch(url, { signal: ctrl.signal });
+    const response = await fetch(resolved, { signal: ctrl.signal });
     const text = await response.text();
     if (allow404 && response.status === 404) {
       return null;
@@ -162,7 +178,7 @@ async function fetchClubDetailWithFallbacks(teamId, timeoutMs) {
 }
 
 function Plot({ data, layout, config, onClick, onHover, className }) {
-  const ref = React.useRef(null);
+  const ref = useRef(null);
 
   useEffect(() => {
     if (!ref.current) return;
@@ -310,7 +326,7 @@ function useHashRoute() {
     return () => window.removeEventListener("hashchange", sync);
   }, []);
 
-  const navigate = React.useCallback((path) => {
+  const navigate = useCallback((path) => {
     const nextHash = path.startsWith("#") ? path : `#${path.startsWith("/") ? path : `/${path}`}`;
     if ((window.location.hash || "#/") !== nextHash) {
       window.location.hash = nextHash;
@@ -349,7 +365,7 @@ function ContactForm() {
     setErr("");
     setStatus("sending");
     try {
-      const res = await fetch("/api/contact", {
+      const res = await fetch(apiUrl("/api/contact"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1134,7 +1150,7 @@ function App() {
 
   const { route, navigate, hash } = useHashRoute();
 
-  const mapHostRef = React.useRef(null);
+  const mapHostRef = useRef(null);
   const [mapDims, setMapDims] = useState(() => {
     if (typeof window === "undefined") return { w: 1200, h: 560 };
     const w = Math.min(Math.floor(window.innerWidth * 0.94), 1680);
@@ -1393,7 +1409,7 @@ function App() {
     return rows;
   }, [topSnapshot, snapshotTableSort]);
 
-  const cycleSnapshotSort = React.useCallback((key) => {
+  const cycleSnapshotSort = useCallback((key) => {
     setSnapshotTableSort((prev) =>
       prev.key !== key ? { key, dir: "desc" } : { key, dir: prev.dir === "desc" ? "asc" : "desc" },
     );
@@ -1784,7 +1800,7 @@ function App() {
                 Sanity check (opens new tab):{" "}
                 {route.page === "club" && route.teamId ? (
                   <a
-                    href={`/api/teams/${route.teamId}/identity`}
+                    href={apiUrl(`/api/teams/${route.teamId}/identity`)}
                     target="_blank"
                     rel="noreferrer"
                   >
@@ -1792,7 +1808,7 @@ function App() {
                   </a>
                 ) : null}{" "}
                 ·{" "}
-                <a href="/api/health" target="_blank" rel="noreferrer">
+                <a href={apiUrl("/api/health")} target="_blank" rel="noreferrer">
                   /api/health
                 </a>
               </p>
@@ -2230,5 +2246,4 @@ function App() {
   );
 }
 
-const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(<App />);
+export default App;

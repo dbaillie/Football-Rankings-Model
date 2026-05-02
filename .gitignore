@@ -14,6 +14,10 @@ venv/
 .env
 .env.local
 
+# --- Node / Vite SPA ---
+**/node_modules/
+webapp/frontend/dist/
+
 # --- Editor / OS ---
 .vscode/
 .idea/

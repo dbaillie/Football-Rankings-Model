@@ -2,6 +2,10 @@
 
 This project implements Glicko-2 rating system for football teams across different countries.
 
+## Web dashboard hosting
+
+The interactive map and API live under `webapp/`. For local run, Vite build, and deploy steps (Render + Vercel, environment variables, CSV data on the server), see [webapp/README.md](webapp/README.md). A Render Blueprint template is in [render.yaml](render.yaml).
+
 ## Data Model
 
 The project uses a star schema data model:

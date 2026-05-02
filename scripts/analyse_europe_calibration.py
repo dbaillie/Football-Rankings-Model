@@ -31,6 +31,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+UEFA_COMP_CODES = frozenset({"UCL", "UEL", "UECL", "EURO"})
+
 
 def _rel_under(root: Path, p: Path) -> str:
     try:
@@ -115,6 +117,128 @@ def _elo_expected_home(rating_diff_home_minus_away: np.ndarray) -> np.ndarray:
     return 1.0 / (1.0 + 10.0 ** ((-d) / 400.0))
 
 
+def _expected_score_metrics(y: np.ndarray, p: np.ndarray) -> dict[str, float]:
+    resid = y - p
+    return {
+        "mae": float(np.mean(np.abs(resid))),
+        "rmse": float(np.sqrt(np.mean(resid**2))),
+        "mean_actual_score": float(np.mean(y)),
+        "mean_pred_score": float(np.mean(p)),
+    }
+
+
+def _attach_pre_match_adjusted_ratings(
+    matches: pd.DataFrame,
+    weekly: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    For each fixture row, attach latest available adjusted rating strictly before match week
+    for home and away teams. Falls back to raw pre-ratings when no adjusted history exists.
+    """
+    req_w = {"pid", "week", "adjusted_rating"}
+    if not req_w.issubset(weekly.columns):
+        out = matches.copy()
+        out["home_pre_adjusted_rating"] = out["home_pre_rating"].astype(float)
+        out["away_pre_adjusted_rating"] = out["away_pre_rating"].astype(float)
+        return out
+
+    wk = weekly[["pid", "week", "adjusted_rating"]].copy()
+    wk = wk.dropna(subset=["pid", "week", "adjusted_rating"])
+    if wk.empty:
+        out = matches.copy()
+        out["home_pre_adjusted_rating"] = out["home_pre_rating"].astype(float)
+        out["away_pre_adjusted_rating"] = out["away_pre_rating"].astype(float)
+        return out
+    wk["pid"] = wk["pid"].astype(int)
+    wk["week"] = wk["week"].astype(int)
+    wk = wk.sort_values(["pid", "week"]).reset_index(drop=True)
+
+    base = matches.copy()
+    home_id_col = "home_team_id" if "home_team_id" in base.columns else "PlayerA"
+    away_id_col = "away_team_id" if "away_team_id" in base.columns else "PlayerB"
+    base["match_week"] = base["week"].astype(int)
+    base = base.sort_values([home_id_col, "match_week"]).reset_index(drop=False)
+
+    # Home side: last adjusted rating from same pid at week < match_week
+    left_home = base[["index", home_id_col, "match_week"]].rename(columns={home_id_col: "pid"})
+    left_home["pid"] = left_home["pid"].astype(int)
+    left_home = left_home.sort_values(["match_week", "pid"]).reset_index(drop=True)
+    right = wk.rename(columns={"week": "wk_week"})
+    right = right.sort_values(["wk_week", "pid"]).reset_index(drop=True)
+    home_asof = pd.merge_asof(
+        left_home,
+        right,
+        left_on="match_week",
+        right_on="wk_week",
+        by="pid",
+        direction="backward",
+        allow_exact_matches=False,
+    )
+    home_adj = home_asof[["index", "adjusted_rating"]].rename(columns={"adjusted_rating": "home_pre_adjusted_rating"})
+
+    # Away side
+    left_away = base[["index", away_id_col, "match_week"]].rename(columns={away_id_col: "pid"})
+    left_away["pid"] = left_away["pid"].astype(int)
+    left_away = left_away.sort_values(["match_week", "pid"]).reset_index(drop=True)
+    away_asof = pd.merge_asof(
+        left_away,
+        right,
+        left_on="match_week",
+        right_on="wk_week",
+        by="pid",
+        direction="backward",
+        allow_exact_matches=False,
+    )
+    away_adj = away_asof[["index", "adjusted_rating"]].rename(columns={"adjusted_rating": "away_pre_adjusted_rating"})
+
+    out = base.merge(home_adj, on="index", how="left").merge(away_adj, on="index", how="left")
+    out["home_pre_adjusted_rating"] = out["home_pre_adjusted_rating"].fillna(out["home_pre_rating"].astype(float))
+    out["away_pre_adjusted_rating"] = out["away_pre_adjusted_rating"].fillna(out["away_pre_rating"].astype(float))
+    out = out.sort_values("index").drop(columns=["index"])
+    return out
+
+
+def _predictor_head_to_head_block(
+    frame: pd.DataFrame,
+    weekly: pd.DataFrame,
+    label: str,
+) -> dict[str, object]:
+    """Compare raw pred_pA vs adjusted-rating logistic expectation on a given match slice."""
+    out: dict[str, object] = {
+        "scope": label,
+        "rows_used": int(len(frame)),
+    }
+    if frame.empty:
+        return out
+
+    comp = _attach_pre_match_adjusted_ratings(frame, weekly)
+    rd_adj = (
+        comp["home_pre_adjusted_rating"].astype(float)
+        - comp["away_pre_adjusted_rating"].astype(float)
+    ).to_numpy()
+    p_adj = _elo_expected_home(rd_adj)
+    yy = comp["actual_scoreA"].astype(float).to_numpy()
+    p_raw = comp["pred_pA"].astype(float).to_numpy()
+    raw_m = _expected_score_metrics(yy, p_raw)
+    adj_m = _expected_score_metrics(yy, p_adj)
+    winner = "gcam_adjusted_pre_ratings" if adj_m["mae"] < raw_m["mae"] else "raw_glicko_pred_pA"
+    out.update(
+        {
+            "raw_glicko_pred_pA": raw_m,
+            "gcam_adjusted_pre_ratings": adj_m,
+            "delta_mae_adjusted_minus_raw": float(adj_m["mae"] - raw_m["mae"]),
+            "delta_rmse_adjusted_minus_raw": float(adj_m["rmse"] - raw_m["rmse"]),
+            "better_by_mae": winner,
+            "notes": [
+                "Both predictors are compared on expected-score targets (1/0.5/0) for home side.",
+                "GCAM predictor uses Elo-400 logistic on pre-match adjusted rating difference.",
+                "When no prior adjusted weekly row exists for a team, raw pre-rating fallback is used.",
+            ],
+        }
+    )
+    return out
+
+
 def main() -> None:
     args = _parse_args()
     root = Path(args.output_root)
@@ -123,6 +247,7 @@ def main() -> None:
     euro = root / "europe"
     pred_path = euro / "europe_predictions.csv"
     match_path = euro / "europe_match_results.csv"
+    weekly_path = euro / "europe_weekly_ratings.csv"
 
     if not pred_path.exists():
         print(f"Missing {pred_path}. Run scripts/run_glicko_europe.py first.", file=sys.stderr)
@@ -133,6 +258,7 @@ def main() -> None:
 
     pred = pd.read_csv(pred_path)
     mat = pd.read_csv(match_path)
+    weekly = pd.read_csv(weekly_path) if weekly_path.exists() else pd.DataFrame()
 
     required_p = {"week", "PlayerA", "PlayerB", "actual_scoreA", "pred_pA"}
     required_m = {"week", "home_team_id", "away_team_id", "home_pre_rating", "away_pre_rating", "result"}
@@ -208,11 +334,11 @@ def main() -> None:
     merged["rating_diff_home_minus_away"] = rd
     merged["elo_expected_home"] = _elo_expected_home(rd)
 
-    residuals = y - p_hat
-    mae = float(np.mean(np.abs(residuals)))
-    rmse = float(np.sqrt(np.mean(residuals**2)))
-    mean_y = float(np.mean(y))
-    mean_p = float(np.mean(p_hat))
+    base_metrics = _expected_score_metrics(y, p_hat)
+    mae = base_metrics["mae"]
+    rmse = base_metrics["rmse"]
+    mean_y = base_metrics["mean_actual_score"]
+    mean_p = base_metrics["mean_pred_score"]
 
     elo_res = y - merged["elo_expected_home"].to_numpy(dtype=float)
     mae_elo = float(np.mean(np.abs(elo_res)))
@@ -284,6 +410,13 @@ def main() -> None:
     bins_path = euro / "calibration_bins.csv"
     bins_df.to_csv(bins_path, index=False)
 
+    # Predictor comparison blocks: all matches + UEFA/EURO subset.
+    all_matches_compare = _predictor_head_to_head_block(merged, weekly, label="all_matches")
+    uefa_mask = merged.get("competition", pd.Series("", index=merged.index)).astype(str).str.upper().isin(UEFA_COMP_CODES)
+    uefa_comp = merged.loc[uefa_mask].copy()
+    uefa_compare = _predictor_head_to_head_block(uefa_comp, weekly, label="uefa_only")
+    uefa_compare["competition_codes"] = sorted(UEFA_COMP_CODES)
+
     summary = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "output_root": str(root),
@@ -309,6 +442,12 @@ def main() -> None:
             "mae_expected_score_elo400_baseline": mae_elo,
             "rmse_expected_score_elo400_baseline": rmse_elo,
         },
+        "predictor_comparisons": {
+            "all_matches": all_matches_compare,
+            "uefa_only": uefa_compare,
+        },
+        # Backward-compatible alias for existing consumers.
+        "uefa_only_predictor_comparison": uefa_compare,
         "bins": bin_summaries,
         "notes": [
             "actual_scoreA is 1 (home win), 0.5 (draw), 0 (away win); pred_pA is the engine pre-match Glicko expectation E(PlayerA).",
@@ -328,6 +467,24 @@ def main() -> None:
         f"Global MAE (score): Glicko pred {mae:.4f} | Elo-400 on pre-ratings {mae_elo:.4f} "
         f"| rows_used={n_merge}{lf}"
     )
+    if all_matches_compare.get("rows_used", 0):
+        rg_all = all_matches_compare["raw_glicko_pred_pA"]["mae"]  # type: ignore[index]
+        ag_all = all_matches_compare["gcam_adjusted_pre_ratings"]["mae"]  # type: ignore[index]
+        win_all = all_matches_compare.get("better_by_mae")
+        print(
+            "All-matches MAE (score): "
+            f"raw pred_pA {float(rg_all):.4f} | adjusted-rating logistic {float(ag_all):.4f} "
+            f"| winner={win_all} | rows={all_matches_compare['rows_used']}"
+        )
+    if uefa_compare.get("rows_used", 0):
+        rg = uefa_compare["raw_glicko_pred_pA"]["mae"]  # type: ignore[index]
+        ag = uefa_compare["gcam_adjusted_pre_ratings"]["mae"]  # type: ignore[index]
+        winner = uefa_compare.get("better_by_mae")
+        print(
+            "UEFA-only MAE (score): "
+            f"raw pred_pA {float(rg):.4f} | adjusted-rating logistic {float(ag):.4f} "
+            f"| winner={winner} | rows={uefa_compare['rows_used']}"
+        )
 
 
 if __name__ == "__main__":

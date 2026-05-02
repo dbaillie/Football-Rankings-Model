@@ -14,6 +14,7 @@ from .data_service import (
     NARRATIVE_LADDER_DROP_FIRST_N_WEEKS,
     _strip_international,
     filter_weekly_for_narrative_ladder,
+    ladder_sort_column,
     load_weekly_ratings,
     narrative_ladder_week_allowlist,
 )
@@ -41,10 +42,11 @@ def _share_sentence(prefix: str, cutoffs: tuple[int, ...], shares: dict[int, flo
 
 
 def _rank_frames(weekly_df: pd.DataFrame, country_key: str) -> tuple[pd.DataFrame, pd.DataFrame]:
-    eu = weekly_df.sort_values(["week", "rating", "pid"], ascending=[True, False, True]).copy()
+    rk = ladder_sort_column(weekly_df)
+    eu = weekly_df.sort_values(["week", rk, "pid"], ascending=[True, False, True]).copy()
     eu["eu_rank"] = eu.groupby("week", sort=False).cumcount() + 1
     dom_base = weekly_df.loc[weekly_df["country_name"].str.lower() == country_key].copy()
-    dom_base = dom_base.sort_values(["week", "rating", "pid"], ascending=[True, False, True])
+    dom_base = dom_base.sort_values(["week", rk, "pid"], ascending=[True, False, True])
     dom_base["dom_rank"] = dom_base.groupby("week", sort=False).cumcount() + 1
     return eu, dom_base
 
