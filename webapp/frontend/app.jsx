@@ -20,25 +20,6 @@ const UEFA_CODES = new Set(["UCL", "UEL", "UECL", "EURO"]);
 /** Lines for country “current top 5 over time” chart (distinct from map heat ramp). */
 const COUNTRY_TOP5_LINE_COLORS = ["#60A5FA", "#D6A84F", "#A78BFA", "#2DD4BF", "#FB923C"];
 
-/**
- * Weekly diffused-strength Y values for the club chart (see backend `diffused_weekly_column`).
- */
-function weeklyDiffusedY(teamSeries) {
-  if (!teamSeries.length) return null;
-  const preferSimple = teamSeries.some((d) => {
-    const v = d.simple_adjusted_rating;
-    return v != null && v !== "" && Number.isFinite(Number(v));
-  });
-  const key = preferSimple ? "simple_adjusted_rating" : "adjusted_rating";
-  const ys = teamSeries.map((d) => {
-    const v = d[key];
-    if (v == null || v === "") return null;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  });
-  return ys.some((y) => y != null) ? ys : null;
-}
-
 /** Choropleth / markers: weak → strong (all blue — no green in the heat ramp) */
 const MAP_HEAT_COLORSCALE = [
   [0, "#1e293b"],
@@ -156,19 +137,32 @@ function Plot({ data, layout, config, onClick, onHover, className }) {
 
   useEffect(() => {
     if (!ref.current) return;
-    Plotly.newPlot(ref.current, data, layout, {
+    const node = ref.current;
+    Plotly.newPlot(node, data, layout, {
       responsive: !(layout && layout.width != null && layout.height != null),
       displaylogo: false,
       ...config,
     });
     if (onClick) {
-      ref.current.on("plotly_click", onClick);
+      node.on("plotly_click", onClick);
     }
     if (onHover) {
-      ref.current.on("plotly_hover", onHover);
+      node.on("plotly_hover", onHover);
     }
+    const ro =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => {
+            if (node && node.offsetParent !== null) Plotly.Plots.resize(node);
+          })
+        : null;
+    ro?.observe(node.parentElement ?? node);
+    const onWinResize = () => {
+      if (node && node.offsetParent !== null) Plotly.Plots.resize(node);
+    };
+    window.addEventListener("resize", onWinResize);
     return () => {
-      const node = ref.current;
+      window.removeEventListener("resize", onWinResize);
+      ro?.disconnect();
       if (node) Plotly.purge(node);
     };
   }, [data, layout, config, onClick, onHover]);
@@ -1637,6 +1631,7 @@ function App() {
   );
 
   const countryTopFivePlotLayout = {
+    autosize: true,
     font: { color: THEME.text },
     paper_bgcolor: THEME.plotPaper,
     plot_bgcolor: THEME.plotGrid,
@@ -1653,6 +1648,7 @@ function App() {
     },
     xaxis: {
       title: { text: "Week start", font: { color: THEME.muted, size: 12 } },
+      automargin: true,
       gridcolor: "#334155",
       zerolinecolor: "#334155",
       tickfont: { color: THEME.muted, size: 11 },
@@ -1660,17 +1656,19 @@ function App() {
       linecolor: "#334155",
     },
     yaxis: {
-      title: { text: "Rating (μ & diffused)", font: { color: THEME.muted, size: 12 } },
+      title: { text: "Glicko rating", font: { color: THEME.muted, size: 12 } },
+      automargin: true,
       gridcolor: "#334155",
       zerolinecolor: "#334155",
       tickfont: { color: THEME.muted, size: 11 },
       color: THEME.muted,
       linecolor: "#334155",
     },
-    margin: { l: 50, r: 20, t: 56, b: 40 },
+    margin: { l: 44, r: 16, t: 28, b: 36 },
   };
 
   const teamPlotLayout = {
+    autosize: true,
     font: { color: THEME.text },
     paper_bgcolor: THEME.plotPaper,
     plot_bgcolor: THEME.plotGrid,
@@ -1682,6 +1680,7 @@ function App() {
     },
     xaxis: {
       title: { text: "Date", font: { color: THEME.muted, size: 12 } },
+      automargin: true,
       gridcolor: "#334155",
       zerolinecolor: "#334155",
       tickfont: { color: THEME.muted, size: 11 },
@@ -1689,73 +1688,41 @@ function App() {
       linecolor: "#334155",
     },
     yaxis: {
-      title: { text: "Rating (μ & diffused)", font: { color: THEME.muted, size: 12 } },
+      title: { text: "Glicko rating", font: { color: THEME.muted, size: 12 } },
+      automargin: true,
       gridcolor: "#334155",
       zerolinecolor: "#334155",
       tickfont: { color: THEME.muted, size: 11 },
       color: THEME.muted,
       linecolor: "#334155",
     },
-    margin: { l: 50, r: 20, t: 24, b: 40 },
+    margin: { l: 44, r: 16, t: 20, b: 40 },
   };
 
-  const teamTrendData = useMemo(() => {
-    const baseName = selectedTeam ? selectedTeam.team_name : "Team";
-    const x = teamSeries.map((d) => d.week_date);
-    const traces = [
-      {
-        x,
-        y: teamSeries.map((d) => Number(d.rating)),
-        mode: "lines",
-        type: "scatter",
-        name: `${baseName} (Glicko μ)`,
-        line: { color: THEME.primaryBright, width: 1.35 },
-      },
-    ];
-    const diffY = weeklyDiffusedY(teamSeries);
-    if (diffY) {
-      traces.push({
-        x,
-        y: diffY,
-        mode: "lines",
-        type: "scatter",
-        name: `${baseName} (diffused)`,
-        line: { color: THEME.accent, width: 1.35, dash: "dash" },
-      });
-    }
-    return traces;
-  }, [teamSeries, selectedTeam]);
+  const teamTrendData = [
+    {
+      x: teamSeries.map((d) => d.week_date),
+      y: teamSeries.map((d) => Number(d.rating)),
+      mode: "lines",
+      type: "scatter",
+      name: selectedTeam ? selectedTeam.team_name : "Team",
+      line: { color: THEME.primaryBright, width: 1.35, dash: "dot" },
+    },
+  ];
 
   const countryTopFivePlotData = useMemo(() => {
     const teams = countryTopSeries?.teams;
     if (!teams || teams.length === 0) return [];
-    return teams.flatMap((t, i) => {
+    return teams.map((t, i) => {
       const c = COUNTRY_TOP5_LINE_COLORS[i % COUNTRY_TOP5_LINE_COLORS.length];
-      const x = t.series.map((p) => p.week_date);
-      const glicko = {
-        x,
+      return {
+        x: t.series.map((p) => p.week_date),
         y: t.series.map((p) => p.rating),
         mode: "lines",
         type: "scatter",
-        name: `${t.team_name} (μ)`,
-        line: { color: c, width: 1.35 },
+        name: t.team_name,
+        line: { color: c, width: 1.35, dash: "dot" },
       };
-      const hasDiffused = t.series.some((p) => {
-        const v = p.diffused_rating;
-        return v != null && Number.isFinite(Number(v));
-      });
-      if (!hasDiffused) return [glicko];
-      return [
-        glicko,
-        {
-          x,
-          y: t.series.map((p) => p.diffused_rating),
-          mode: "lines",
-          type: "scatter",
-          name: `${t.team_name} (diffused)`,
-          line: { color: c, width: 1.35, dash: "dash" },
-        },
-      ];
     });
   }, [countryTopSeries]);
 
@@ -1927,10 +1894,9 @@ function App() {
 
               <div className="card">
                 <h2>Rating Over Time</h2>
-                <p className="small" style={{ marginTop: "-8px" }}>
-                  Solid: Glicko μ (weekly rating). Dashed: diffused strength when available in the dataset.
-                </p>
-                <Plot data={teamTrendData} layout={teamPlotLayout} />
+                <div className="chart-embed">
+                  <Plot data={teamTrendData} layout={teamPlotLayout} />
+                </div>
               </div>
 
               <div className="club-extremes-grid">
@@ -2130,7 +2096,7 @@ function App() {
                   </select>
                 </div>
                 {selectedTeamId ? (
-                  <div style={{ alignSelf: "end" }}>
+                  <div className="controls-actions">
                     <a
                       className="link-btn link-btn--primary"
                       href={`#/club/${selectedTeamId}`}
@@ -2149,15 +2115,16 @@ function App() {
                 <h2>Current Top 5 — History Over Time</h2>
                 <p className="small" style={{ marginTop: "-8px" }}>
                   The five highest-rated clubs in this country in the latest rating week; each line follows that club
-                  across all rating weeks. Solid: Glicko μ; dashed: diffused strength (same color per club), when
-                  available.
+                  across all rating weeks in the dataset.
                 </p>
                 {countryTopFivePlotData.length === 0 ? (
                   <p className="small" style={{ marginBottom: 0 }}>
                     Chart data isn&apos;t available for this view yet. Try again shortly or choose another country.
                   </p>
                 ) : (
-                  <Plot data={countryTopFivePlotData} layout={countryTopFivePlotLayout} />
+                  <div className="chart-embed">
+                    <Plot data={countryTopFivePlotData} layout={countryTopFivePlotLayout} />
+                  </div>
                 )}
               </div>
             </>

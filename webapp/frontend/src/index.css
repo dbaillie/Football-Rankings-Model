@@ -733,6 +733,17 @@
         align-items: end;
       }
 
+      /* Plotly: constrain width on narrow viewports (club/country line charts). */
+      .chart-embed {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+      }
+
+      .controls-actions {
+        align-self: end;
+      }
+
       label {
         display: block;
         font-size: 0.8rem;
@@ -1250,6 +1261,35 @@
         .controls {
           grid-template-columns: 1fr;
           gap: 12px;
+        }
+
+        .controls-actions {
+          align-self: stretch;
+        }
+
+        .controls-actions > .link-btn {
+          width: 100%;
+          justify-content: center;
+          box-sizing: border-box;
+        }
+
+        main#main-content h1 {
+          overflow-wrap: anywhere;
+          word-break: break-word;
+          max-width: 100%;
+        }
+
+        .card.error {
+          display: flex;
+          flex-direction: column;
+          align-items: stretch;
+          gap: 12px;
+        }
+
+        .card.error .link-btn {
+          justify-content: center;
+          width: 100%;
+          box-sizing: border-box;
         }
 
         .map-plot-host {

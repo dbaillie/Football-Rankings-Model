@@ -697,6 +697,62 @@
         letter-spacing: 0.02em;
       }
 
+      .chart-embed {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+      }
+
+      .controls-actions {
+        align-self: end;
+      }
+
+      @media (max-width: 768px) {
+        .page-nav {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .page-nav .link-btn {
+          min-height: 44px;
+          justify-content: center;
+        }
+
+        .controls {
+          grid-template-columns: 1fr;
+          gap: 12px;
+        }
+
+        .controls-actions {
+          align-self: stretch;
+        }
+
+        .controls-actions > .link-btn {
+          width: 100%;
+          justify-content: center;
+          box-sizing: border-box;
+        }
+
+        main#main-content h1 {
+          overflow-wrap: anywhere;
+          word-break: break-word;
+          max-width: 100%;
+        }
+
+        .card.error {
+          display: flex;
+          flex-direction: column;
+          align-items: stretch;
+          gap: 12px;
+        }
+
+        .card.error .link-btn {
+          justify-content: center;
+          width: 100%;
+          box-sizing: border-box;
+        }
+      }
+
       @media (max-width: 640px) {
         .site-header-inner {
           padding: 12px 16px;
@@ -711,6 +767,6 @@
     <a class="skip-link" href="#main-content">Skip to content</a>
     <div id="root"></div>
     <!-- Bump ?v= when app.jsx behavior changes — browsers aggressively cache script URLs otherwise. -->
-    <script type="text/babel" src="/assets/app.jsx?v=20260502dual-top25"></script>
+    <script type="text/babel" src="/assets/app.jsx?v=20260502charts-mobile"></script>
   </body>
 </html>
