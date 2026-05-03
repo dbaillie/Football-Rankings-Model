@@ -25,6 +25,7 @@ from .contact_email import contact_smtp_configured, send_contact_submission
 from .country_narrative import build_country_narrative
 from .team_narrative import build_team_narrative
 from .calibration_service import clear_calibration_summary_cache, load_calibration_summary
+from .database import ping_database, use_database
 from .data_service import (
     OUTPUT_DIR,
     clear_data_caches,
@@ -83,20 +84,21 @@ async def lifespan(app: FastAPI):
 
     if os.environ.get("FOOTBALL_RANKINGS_SKIP_PRELOAD") == "1":
         print(
-            "Football Rankings API: FOOTBALL_RANKINGS_SKIP_PRELOAD=1 — CSV preload skipped; "
-            "first club request may stall while ~190k match rows load.",
+            "Football Rankings API: FOOTBALL_RANKINGS_SKIP_PRELOAD=1 — startup preload skipped; "
+            "first heavy request may stall while large tables load.",
             flush=True,
         )
         yield
         return
+    backend = "Postgres (DATABASE_URL)" if use_database() else "CSV files under europe_data_dir"
     print(
-        "Football Rankings API: preloading CSV caches (may take 1–2 min). "
+        f"Football Rankings API: preloading data caches from {backend} (may take 1–2 min). "
         "Browser requests will wait until this completes.",
         flush=True,
     )
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(None, warm_csv_caches)
-    print("Football Rankings API: CSV preload complete.", flush=True)
+    print("Football Rankings API: data preload complete.", flush=True)
     yield
 
 
@@ -173,11 +175,12 @@ def health_minimal() -> dict[str, str]:
 
 @app.get("/ratings")
 def ratings_csv_public(
-    top_n: int = Query(default=500, ge=1, le=2000, description="Rows from latest rating week."),
+    top_n: int = Query(default=100, ge=1, le=500, description="Rows from latest rating week."),
+    offset: int = Query(default=0, ge=0, description="Skip this many rows after ranking."),
 ) -> list[dict]:
-    """Latest-week snapshot rows (subset of CSV-backed ratings). Same backing data as `/api/snapshot`."""
+    """Latest-week snapshot rows (paginated). Same backing data as `/api/snapshot`."""
     try:
-        return get_latest_snapshot(top_n=top_n)
+        return get_latest_snapshot(top_n=top_n, offset=offset)
     except FileNotFoundError:
         raise HTTPException(status_code=500, detail="Ratings data file not found") from None
     except Exception:
@@ -186,8 +189,11 @@ def ratings_csv_public(
 
 @app.get("/api/health")
 def health() -> dict[str, str]:
+    pg_ok = not use_database() or ping_database()
     return {
         "status": "ok",
+        "data_backend": "postgres" if use_database() else "csv_files",
+        "postgres_reachable": "yes" if pg_ok else "no",
         "europe_data_dir": str(OUTPUT_DIR.resolve()),
         "csv_preload_at_startup": "no"
         if os.environ.get("FOOTBALL_RANKINGS_SKIP_PRELOAD") == "1"
@@ -261,8 +267,11 @@ def teams(country: str | None = Query(default=None)) -> list[dict]:
 
 
 @app.get("/api/snapshot")
-def snapshot(top_n: int = Query(default=25, ge=1, le=100)) -> list[dict]:
-    return get_latest_snapshot(top_n=top_n)
+def snapshot(
+    top_n: int = Query(default=25, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> list[dict]:
+    return get_latest_snapshot(top_n=top_n, offset=offset)
 
 
 @app.get("/api/calibration")

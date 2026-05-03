@@ -15,6 +15,19 @@ function apiUrl(path) {
   return base ? `${base}${p}` : p;
 }
 
+/** Shorter Plotly chart height on phones so country/club/calibration pages need less vertical scroll. */
+function useChartMinHeight() {
+  const [px, setPx] = useState(420);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 768px)");
+    const apply = () => setPx(mq.matches ? 280 : 420);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+  return px;
+}
+
 /** Matches dark theme tokens in index.html */
 const THEME = {
   text: "#F8FAFC",
@@ -177,8 +190,9 @@ async function fetchClubDetailWithFallbacks(teamId, timeoutMs) {
   );
 }
 
-function Plot({ data, layout, config, onClick, onHover, className }) {
+function Plot({ data, layout, config, onClick, onHover, className, mapChart = false }) {
   const ref = useRef(null);
+  const chartMinHeight = useChartMinHeight();
 
   useEffect(() => {
     if (!ref.current) return;
@@ -199,14 +213,16 @@ function Plot({ data, layout, config, onClick, onHover, className }) {
     };
   }, [data, layout, config, onClick, onHover]);
 
+  const fillMap = mapChart || className === "map-plot-host";
+
   return (
     <div
       ref={ref}
-      className={className === "map-plot-host" ? `${className} map-plot-fill` : className}
+      className={fillMap ? "map-plot-fill" : className}
       style={{
         width: "100%",
-        height: className === "map-plot-host" ? "100%" : undefined,
-        minHeight: className === "map-plot-host" ? undefined : 420,
+        height: fillMap ? "100%" : undefined,
+        minHeight: fillMap ? undefined : chartMinHeight,
       }}
     />
   );
@@ -337,156 +353,7 @@ function useHashRoute() {
   return { route, navigate, hash };
 }
 
-function ContactForm() {
-  const [enabled, setEnabled] = useState(null);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [message, setMessage] = useState("");
-  const [company, setCompany] = useState("");
-  const [status, setStatus] = useState("idle");
-  const [err, setErr] = useState("");
-
-  useEffect(() => {
-    let cancel = false;
-    getJson("/api/contact/status", { allow404: true })
-      .then((d) => {
-        if (!cancel) setEnabled(Boolean(d && d.enabled));
-      })
-      .catch(() => {
-        if (!cancel) setEnabled(false);
-      });
-    return () => {
-      cancel = true;
-    };
-  }, []);
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setErr("");
-    setStatus("sending");
-    try {
-      const res = await fetch(apiUrl("/api/contact"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          email: email.trim(),
-          message: message.trim(),
-          company,
-        }),
-      });
-      const text = await res.text();
-      let detailMsg = text || `HTTP ${res.status}`;
-      try {
-        const body = JSON.parse(text);
-        if (typeof body.detail === "string") detailMsg = body.detail;
-        else if (Array.isArray(body.detail))
-          detailMsg = body.detail.map((x) => x.msg || JSON.stringify(x)).join("; ");
-      } catch (_) {
-        /* leave detailMsg */
-      }
-      if (!res.ok) throw new Error(detailMsg);
-      setStatus("success");
-      setName("");
-      setEmail("");
-      setMessage("");
-      setCompany("");
-    } catch (x) {
-      setStatus("idle");
-      setErr(x.message || "Something went wrong.");
-    }
-  }
-
-  const sending = status === "sending";
-  const canSubmit = enabled === true && !sending;
-
-  return (
-    <div className="card contact-card">
-      <h2>Contact me</h2>
-      <p className="small" style={{ marginTop: "-8px", marginBottom: "14px" }}>
-        Send a note about this project or the ratings. Your email is only used to reply.
-      </p>
-      {enabled === false ? (
-        <p className="small" style={{ marginBottom: 0 }}>
-          Sending is not configured on this server yet (SMTP environment variables). Check{" "}
-          <code>/api/health</code> for <code>contact_email</code> — it should read{" "}
-          <code>configured</code> once env vars are set.
-        </p>
-      ) : (
-        <form className="contact-form" onSubmit={handleSubmit}>
-          <div className="field hp-field" aria-hidden="true">
-            <label htmlFor="contact-company">Company</label>
-            <input
-              id="contact-company"
-              name="company"
-              type="text"
-              tabIndex={-1}
-              autoComplete="off"
-              value={company}
-              onChange={(e) => setCompany(e.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="contact-name">Name</label>
-            <input
-              id="contact-name"
-              name="name"
-              type="text"
-              required
-              maxLength={200}
-              autoComplete="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              disabled={sending}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="contact-email">Email</label>
-            <input
-              id="contact-email"
-              name="email"
-              type="email"
-              required
-              maxLength={320}
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={sending}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="contact-message">Message</label>
-            <textarea
-              id="contact-message"
-              name="message"
-              required
-              maxLength={8000}
-              rows={6}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              disabled={sending}
-            />
-          </div>
-          {err ? (
-            <p className="small" style={{ color: "#f87171", marginBottom: "10px" }}>
-              {err}
-            </p>
-          ) : null}
-          {status === "success" ? (
-            <p className="contact-success" style={{ marginBottom: "10px" }}>
-              Thanks — your message was sent.
-            </p>
-          ) : null}
-          <button type="submit" className="contact-send" disabled={!canSubmit}>
-            {enabled === null ? "Checking…" : sending ? "Sending…" : "Send message"}
-          </button>
-        </form>
-      )}
-    </div>
-  );
-}
-
-/** Renders narrative strings that use **markers** as bold (template-controlled; not raw HTML). */
+/** Info / Method page (static copy + About). */
 function InfoPage({ navigate }) {
   return (
     <>
@@ -497,6 +364,14 @@ function InfoPage({ navigate }) {
           club pages.
         </p>
       </header>
+
+      <div className="card">
+        <h2>About</h2>
+        <p className="small" style={{ marginBottom: 0 }}>
+          Built by <strong>Douglas Baillie</strong>. Contact:{" "}
+          <a href="mailto:douglasbaillie@live.co.uk">douglasbaillie@live.co.uk</a>
+        </p>
+      </div>
 
       <div className="card">
         <h2>Rating system</h2>
@@ -612,12 +487,11 @@ function InfoPage({ navigate }) {
           labels) for debugging or future UI — not shown on the page today.
         </p>
       </div>
-
-      <ContactForm />
     </>
   );
 }
 
+/** Narrative strings use **markers** as bold (template-controlled; not raw HTML). */
 function NarrativeParagraph({ text }) {
   const parts = String(text).split(/\*\*/);
   return (
@@ -1220,9 +1094,9 @@ function App() {
           getJson("/api/snapshot?top_n=25"),
           getJson("/api/country-summaries", { allow404: true }),
         ]);
-        setCountries(countriesData);
-        setTeams(teamsData);
-        setTopSnapshot(snapshot);
+        setCountries(Array.isArray(countriesData) ? countriesData : []);
+        setTeams(Array.isArray(teamsData) ? teamsData : []);
+        setTopSnapshot(Array.isArray(snapshot) ? snapshot : []);
         setCountrySummaries(Array.isArray(summariesData) ? summariesData : []);
         const initial = typeof window !== "undefined" ? parseHashRoute() : { page: "home" };
         if (countriesData.length > 0) {
@@ -2100,6 +1974,7 @@ function App() {
               </div>
               <div ref={mapHostRef} className="map-plot-host">
                 <Plot
+                  mapChart
                   data={mapData}
                   layout={europeMapLayout}
                   onClick={(event) => {
@@ -2143,6 +2018,12 @@ function App() {
               Diffused.
             </p>
             <div className="table-scroll">
+            {!loading && sortedTopSnapshot.length === 0 ? (
+              <p className="small" style={{ marginBottom: "12px" }}>
+                No clubs in the current top snapshot (empty response or visibility filters excluded everyone). Confirm
+                Supabase import and that GET /api/health reports postgres_reachable=yes when using DATABASE_URL.
+              </p>
+            ) : null}
             <table>
               <thead>
                 <tr>

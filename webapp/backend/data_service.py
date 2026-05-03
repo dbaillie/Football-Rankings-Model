@@ -25,6 +25,16 @@ ANALYTICAL_START_WEEK = 200531
 ANALYTICAL_START_DATE = pd.Timestamp("2005-07-01")
 
 
+def _use_database() -> bool:
+    """When True, heavy tables are read from Postgres (DATABASE_URL) instead of CSV files."""
+    try:
+        from .database import use_database
+
+        return use_database()
+    except Exception:
+        return False
+
+
 def _load_recent_calendar_years_limit() -> int | None:
     """
     If set to a positive integer N, only load match rows and weekly rating rows from the last N
@@ -158,6 +168,17 @@ def week_to_date(week_value: int) -> pd.Timestamp | None:
 
 @lru_cache(maxsize=1)
 def load_teams() -> pd.DataFrame:
+    if _use_database():
+        from sqlalchemy import text
+
+        from .database import get_engine
+
+        teams = pd.read_sql(text("SELECT * FROM fr_teams"), get_engine())
+        teams = teams.rename(columns={"team_id": "pid"})
+        teams["pid"] = teams["pid"].astype(int)
+        teams["country_name"] = teams["country_name"].fillna("unknown")
+        return teams
+
     teams = pd.read_csv(OUTPUT_DIR / "europe_teams.csv")
     teams = teams.rename(columns={"team_id": "pid"})
     teams["pid"] = teams["pid"].astype(int)
@@ -181,6 +202,33 @@ def _finalize_weekly_ratings_frame(weekly: pd.DataFrame) -> pd.DataFrame:
 
 @lru_cache(maxsize=1)
 def load_weekly_ratings() -> pd.DataFrame:
+    if _use_database():
+        from sqlalchemy import text
+
+        from .database import get_engine
+
+        eng = get_engine()
+        min_cal_year = _min_calendar_year_for_recent_load()
+        if min_cal_year is None:
+            q = text(
+                """
+                SELECT * FROM fr_weekly_ratings
+                WHERE week >= :aw
+                """
+            )
+            weekly = pd.read_sql(q, eng, params={"aw": ANALYTICAL_START_WEEK})
+        else:
+            q = text(
+                """
+                SELECT * FROM fr_weekly_ratings
+                WHERE week >= :aw AND (week / 100) >= :min_y
+                """
+            )
+            weekly = pd.read_sql(
+                q, eng, params={"aw": ANALYTICAL_START_WEEK, "min_y": min_cal_year}
+            )
+        return _finalize_weekly_ratings_frame(weekly)
+
     path = OUTPUT_DIR / "europe_weekly_ratings.csv"
     dtype_kw = {"dtype": {"country_name": "string", "team_name": "string"}, "low_memory": False}
     min_cal_year = _min_calendar_year_for_recent_load()
@@ -189,7 +237,6 @@ def load_weekly_ratings() -> pd.DataFrame:
         weekly = pd.read_csv(path, **dtype_kw)
         return _finalize_weekly_ratings_frame(weekly)
 
-    # Chunked read keeps peak RAM lower than loading the full multi‑100 MB CSV at once.
     pieces: list[pd.DataFrame] = []
     for chunk in pd.read_csv(path, chunksize=150_000, **dtype_kw):
         chunk["week"] = chunk["week"].astype(int)
@@ -207,6 +254,16 @@ def load_weekly_ratings() -> pd.DataFrame:
 
 @lru_cache(maxsize=1)
 def load_final_ratings() -> pd.DataFrame:
+    if _use_database():
+        from sqlalchemy import text
+
+        from .database import get_engine
+
+        ratings = pd.read_sql(text("SELECT * FROM fr_europe_ratings"), get_engine())
+        ratings["country_name"] = ratings["country_name"].fillna("unknown").astype(str)
+        ratings["team_name"] = ratings["team_name"].fillna("Unknown Team").astype(str)
+        return ratings
+
     ratings = pd.read_csv(
         OUTPUT_DIR / "europe_ratings.csv",
         dtype={"country_name": "string", "team_name": "string"},
@@ -217,8 +274,7 @@ def load_final_ratings() -> pd.DataFrame:
     return ratings
 
 
-@lru_cache(maxsize=1)
-def load_match_results() -> pd.DataFrame:
+def _load_match_results_raw_csv() -> pd.DataFrame:
     path = OUTPUT_DIR / "europe_match_results.csv"
     min_cal_year = _min_calendar_year_for_recent_load()
 
@@ -247,8 +303,47 @@ def load_match_results() -> pd.DataFrame:
             (matches["week"].astype(int) >= ANALYTICAL_START_WEEK)
             & (matches["match_date"] >= ANALYTICAL_START_DATE)
         ].copy()
+    return matches
 
-    # Approximate expected result from pre-match rating differential.
+
+def _load_match_results_raw_db() -> pd.DataFrame:
+    from sqlalchemy import text
+
+    from .database import get_engine
+
+    eng = get_engine()
+    min_cal_year = _min_calendar_year_for_recent_load()
+    md0 = ANALYTICAL_START_DATE.strftime("%Y-%m-%d")
+    if min_cal_year is None:
+        q = text(
+            """
+            SELECT * FROM fr_match_results
+            WHERE week >= :aw AND match_date >= :md
+            """
+        )
+        matches = pd.read_sql(q, eng, params={"aw": ANALYTICAL_START_WEEK, "md": md0})
+    else:
+        q = text(
+            """
+            SELECT * FROM fr_match_results
+            WHERE week >= :aw AND match_date >= :md
+              AND EXTRACT(YEAR FROM match_date::timestamp) >= :min_y
+            """
+        )
+        matches = pd.read_sql(
+            q,
+            eng,
+            params={"aw": ANALYTICAL_START_WEEK, "md": md0, "min_y": min_cal_year},
+        )
+    matches["match_date"] = pd.to_datetime(matches["match_date"], errors="coerce")
+    return matches
+
+
+def _add_match_derived_columns(matches: pd.DataFrame) -> pd.DataFrame:
+    if matches.empty:
+        return matches
+    matches = matches.copy()
+    matches["match_date"] = pd.to_datetime(matches["match_date"], errors="coerce")
     expected_home = 1.0 / (
         1.0 + 10 ** ((matches["away_pre_rating"] - matches["home_pre_rating"]) / 400.0)
     )
@@ -265,8 +360,24 @@ def load_match_results() -> pd.DataFrame:
     return matches
 
 
+@lru_cache(maxsize=1)
+def load_match_results() -> pd.DataFrame:
+    if _use_database():
+        matches = _load_match_results_raw_db()
+    else:
+        matches = _load_match_results_raw_csv()
+    return _add_match_derived_columns(matches)
+
+
+@lru_cache(maxsize=1)
+def _visibility_eligible_db_cached() -> frozenset[int]:
+    return _compute_visibility_eligible_team_ids()
+
+
 def visibility_eligible_team_ids() -> frozenset[int]:
     """Team ids that pass the recent activity gate (see CLUB_VISIBILITY_*). Cached on match-results CSV mtime."""
+    if _use_database():
+        return _visibility_eligible_db_cached()
     match_csv = OUTPUT_DIR / "europe_match_results.csv"
 
     def build() -> frozenset[int]:
@@ -319,7 +430,7 @@ def _compute_visibility_eligible_team_ids() -> frozenset[int]:
 
 
 def warm_csv_caches() -> None:
-    """Eager-load heavy CSV frames so the first `/api/club/...` call does not block for minutes."""
+    """Eager-load heavy data frames (CSV files or Postgres tables) so the first heavy API call is faster."""
     load_teams()
     load_weekly_ratings()
     load_match_results()
@@ -590,7 +701,7 @@ def get_team_biggest_matches(team_id: int, limit: int = 10) -> dict[str, list[di
     }
 
 
-def get_latest_snapshot(top_n: int = 25) -> list[dict[str, Any]]:
+def get_latest_snapshot(top_n: int = 25, offset: int = 0) -> list[dict[str, Any]]:
     weekly = load_weekly_ratings()
     latest_week = int(weekly["week"].max())
     latest = weekly[weekly["week"] == latest_week].copy()
@@ -601,7 +712,7 @@ def get_latest_snapshot(top_n: int = 25) -> list[dict[str, Any]]:
     eligible = visibility_eligible_team_ids()
     latest = latest[latest["pid"].isin(eligible)]
     rank_col = ladder_sort_column(latest)
-    latest = latest.sort_values(rank_col, ascending=False).head(top_n)
+    latest = latest.sort_values(rank_col, ascending=False).iloc[offset : offset + top_n]
     base_cols = ["pid", "team_name", "country_name", "rating", "rd", "week"]
     extra = [
         c
@@ -682,9 +793,10 @@ def get_country_summaries() -> list[dict[str, Any]]:
 
 
 def clear_data_caches() -> None:
-    """Clear in-memory CSV caches so next request reloads files from disk."""
+    """Clear in-memory CSV / DB dataframe caches so next request reloads."""
     _csv_cache.clear()
     load_teams.cache_clear()
     load_weekly_ratings.cache_clear()
     load_final_ratings.cache_clear()
     load_match_results.cache_clear()
+    _visibility_eligible_db_cached.cache_clear()

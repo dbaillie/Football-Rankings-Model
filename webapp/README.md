@@ -90,6 +90,36 @@ Then open [http://127.0.0.1:8000](http://127.0.0.1:8000) when using option (1) o
 
 After pulling changes that add API routes, **stop uvicorn completely** (Ctrl+C so both reloader and worker exit) and start it again. If `--reload` misses a change, club endpoints can 404 while older routes still work—check [http://127.0.0.1:8000/openapi.json](http://127.0.0.1:8000/openapi.json) for **`/api/club/{team_id}`**.
 
+## Postgres (Supabase) data backend
+
+For hosted deployments, reading multi‑hundred‑MB CSVs from disk on every cold start is fragile. Optional **`DATABASE_URL`** switches the API to load **`fr_*`** tables from Postgres instead of **`output/europe/*.csv`**.
+
+### Supabase setup
+
+1. Create a Supabase project (free tier is fine).
+2. Open **Project Settings → Database → Connection string** and copy the **URI** (postgres driver). Use the **Session pooler** connection if Supabase offers both poolers; keep port consistent with the string they show.
+3. Locally, copy [`webapp/backend/.env.example`](webapp/backend/.env.example) concepts into a **repo-root `.env`** (same place `python-dotenv` loads from when you run `run_server.py`) or export **`DATABASE_URL`** in your shell. Never commit real credentials.
+4. On **Render**, add **`DATABASE_URL`** under Environment for the API service (same URI). Redeploy after saving.
+5. From repo root, after generating Europe CSVs under `output/europe/`:
+
+   ```bash
+   pip install -r requirements.txt
+   set DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/postgres
+   python scripts/import_europe_to_postgres.py
+   ```
+
+   The script replaces **`fr_teams`**, **`fr_weekly_ratings`**, **`fr_match_results`**, **`fr_europe_ratings`** and creates indexes. **`FOOTBALL_OUTPUT_EUROPE_DIR`** can point at a non-default CSV folder.
+6. In Supabase **Table Editor**, confirm row counts look sane.
+7. Start the API locally and verify **`GET http://127.0.0.1:8000/api/health`** shows **`data_backend":"postgres"`** and **`postgres_reachable":"yes`**, then **`GET http://127.0.0.1:8000/ratings?top_n=10`** (same rows as **`GET /api/snapshot?top_n=10`**).
+8. Deploy the backend to Render with **`DATABASE_URL`** set.
+
+### Behaviour notes
+
+- **`GET /api/health`** includes **`data_backend`** (`postgres` vs `csv_files`) and **`postgres_reachable`** when Postgres is configured.
+- **`GET /ratings`** and **`GET /api/snapshot`** accept **`top_n`** (page size) and **`offset`** (pagination). Defaults are conservative (**`/ratings`** default **`top_n=100`**, max **500**).
+- CSV files remain useful as **import sources** and for offline analytics; they do not need to exist on the server when **`DATABASE_URL`** is set.
+- Startup **`warm_csv_caches`** still loads large frames into memory once per process (from Postgres or CSV). **`FOOTBALL_LOAD_LAST_CALENDAR_YEARS`** still trims weekly ratings and matches when set.
+
 ## Contact form (Info page)
 
 The **Contact me** form POSTs to `/api/contact` and sends mail over SMTP. Install deps including `email-validator` (`pip install -r requirements.txt`). Configure before use:
@@ -112,14 +142,14 @@ The **Contact me** form POSTs to `/api/contact` and sends mail over SMTP. Instal
 ## API endpoints
 
 - `GET /health` — minimal `{ "status": "ok" }` (Render / uptime checks)
-- `GET /ratings` — latest-week snapshot rows (CSV-backed; query `top_n`, default 500)
+- `GET /ratings` — latest-week snapshot rows (`top_n`, `offset`; default `top_n=100`, max 500)
 - `GET /api/health`
 - `GET /api/contact/status` — whether the contact form can send mail
 - `POST /api/contact` — JSON body `{ "name", "email", "message", "company" }` (`company` is a honeypot; leave empty)
 - `GET /api/countries`
 - `GET /api/country-summaries`
 - `GET /api/teams?country=england`
-- `GET /api/snapshot?top_n=25`
+- `GET /api/snapshot?top_n=25&offset=0`
 - `GET /api/country/{country}/timeseries`
 - `GET /api/team/{team_id}/timeseries`
 - `GET /api/team/{team_id}/biggest-matches?limit=12`
@@ -128,7 +158,9 @@ The **Contact me** form POSTs to `/api/contact` and sends mail over SMTP. Instal
 
 ## Hosting (Render + Vercel)
 
-- **Data (Render will crash without this):** The API expects these files on the server — same filenames as locally under `output/europe/`:
+- **Data:** Prefer **`DATABASE_URL`** (Supabase Postgres) plus **`python scripts/import_europe_to_postgres.py`** so the API does not rely on huge CSVs on the host. Alternatively, ship CSVs:
+
+- **Data (CSV mode — Render needs files on disk):** The API expects these files on the server — same filenames as locally under `output/europe/`:
 
   `europe_teams.csv`, `europe_weekly_ratings.csv`, `europe_ratings.csv`, `europe_match_results.csv`
 
@@ -143,6 +175,16 @@ The **Contact me** form POSTs to `/api/contact` and sends mail over SMTP. Instal
   (add `calibration_summary.json` the same way if you want that page live), commit, push, redeploy Render. If GitHub rejects a file for being **too large** (~100 MB limit per file), use a different strategy (persistent disk + upload, Private asset URL in build, etc.) instead.
 
   Alternate: set **`FOOTBALL_OUTPUT_EUROPE_DIR`** on Render to an **absolute path** where you placed those CSVs (e.g. a mounted persistent disk directory).
+
+  **Pre-shrink CSVs on disk (recommended with ~512 MiB RAM):** run locally:
+
+  ```bash
+  python scripts/slim_europe_for_web_deploy.py --last-calendar-years 2 --dest output/europe_slim --copy-calibration-json
+  ```
+
+  That writes row- and column-trimmed **`europe_weekly_ratings.csv`**, **`europe_match_results.csv`**, **`europe_ratings.csv`**, copies **`europe_teams.csv`**, optionally **`calibration_summary.json`**. Commit **`output/europe_slim/`** (or replace `output/europe` after backup) and point **`FOOTBALL_OUTPUT_EUROPE_DIR`** at that folder on the server — smaller Git + lower pandas RAM than trimming only at runtime.
+
+  If you trim matches to fewer calendar years than **`FOOTBALL_CLUB_VISIBILITY_YEARS`** (default `2024,2025,2026`), set env to years that still exist in the sliced file, e.g. **`FOOTBALL_CLUB_VISIBILITY_YEARS=2025,2026`**, or many clubs disappear from the map.
 - **Backend (Render):** Use the repository root as the service root. Start command:
 
   `uvicorn webapp.backend.main:app --host 0.0.0.0 --port $PORT`

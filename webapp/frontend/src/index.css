@@ -45,7 +45,9 @@
         color: var(--text);
         line-height: 1.5;
         min-height: 100vh;
+        min-height: 100dvh;
         -webkit-font-smoothing: antialiased;
+        touch-action: manipulation;
       }
 
       /* Skip link for keyboard users */
@@ -77,7 +79,8 @@
       .site-header-inner {
         max-width: 1200px;
         margin: 0 auto;
-        padding: 14px 24px;
+        padding: 14px max(16px, env(safe-area-inset-right)) 14px max(16px, env(safe-area-inset-left));
+        padding-top: max(14px, env(safe-area-inset-top));
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -137,7 +140,8 @@
       .container {
         max-width: 1200px;
         margin: 0 auto;
-        padding: 24px;
+        padding: 24px max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom))
+          max(24px, env(safe-area-inset-left));
       }
 
       /* Full width of the content column — avoids 100vw breakout (scrollbar / horizontal overflow). */
@@ -182,6 +186,7 @@
         min-height: 340px;
         max-height: min(72vh, 780px);
         margin: 0 auto;
+        touch-action: pan-x pan-y pinch-zoom;
       }
 
       .map-plot-host .map-plot-fill {
@@ -437,6 +442,8 @@
       .table-scroll {
         max-height: min(70vh, 720px);
         overflow: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
         border: 1px solid var(--border);
         border-radius: var(--radius-sm);
         background: color-mix(in srgb, var(--bg) 40%, var(--surface));
@@ -676,11 +683,106 @@
         letter-spacing: 0.02em;
       }
 
-      @media (max-width: 640px) {
+      /* --- Mobile / narrow viewports --- */
+      @media (max-width: 768px) {
         .site-header-inner {
-          padding: 12px 16px;
+          flex-direction: column;
+          align-items: stretch;
+          gap: 12px;
+          padding: max(12px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 12px
+            max(14px, env(safe-area-inset-left));
         }
+
+        .site-brand {
+          justify-content: center;
+          text-align: center;
+        }
+
+        .site-nav {
+          justify-content: center;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .site-nav a,
+        a.link-btn.link-btn--header {
+          min-height: 44px;
+          padding: 10px 14px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .page-nav {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .page-nav .link-btn {
+          min-height: 44px;
+          justify-content: center;
+        }
+
+        .controls {
+          grid-template-columns: 1fr;
+          gap: 12px;
+        }
+
+        .map-plot-host {
+          aspect-ratio: 1.75 / 1;
+          min-height: 240px;
+          max-height: min(58vh, 520px);
+        }
+
+        .map-card-intro {
+          padding: 0 4px;
+        }
+
+        .club-extremes-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .table-scroll {
+          max-height: min(55vh, 560px);
+        }
+
+        th,
+        td {
+          padding: 10px 8px;
+          font-size: 0.8125rem;
+        }
+
+        .card {
+          padding: 16px 14px;
+        }
+
+        .sub-head {
+          font-size: 0.9rem;
+        }
+      }
+
+      @media (max-width: 480px) {
         .container {
-          padding: 16px;
+          padding-left: max(12px, env(safe-area-inset-left));
+          padding-right: max(12px, env(safe-area-inset-right));
+          padding-bottom: max(16px, env(safe-area-inset-bottom));
+        }
+
+        h1 {
+          font-size: 1.35rem;
+        }
+
+        .site-nav a,
+        a.link-btn.link-btn--header {
+          font-size: 0.8125rem;
+        }
+
+        .map-plot-host {
+          min-height: 220px;
+          max-height: min(52vh, 480px);
+        }
+
+        .kbd-hint {
+          display: none;
         }
       }

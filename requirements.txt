@@ -36,6 +36,8 @@ fastapi
 email-validator
 uvicorn
 python-dotenv
+sqlalchemy
+psycopg2-binary
 jinja2
 pendulum
 ruptures  # needs a C compiler where wheels are missing; narrative falls back to numpy splits
