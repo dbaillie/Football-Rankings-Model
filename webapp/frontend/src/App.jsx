@@ -283,6 +283,25 @@ const CHOROPLETH_LOCATION_BY_COUNTRY = {
   turkey: "Turkey",
 };
 
+/**
+ * One marker per country on the map: duplicate summary rows (e.g. "England" vs "England ")
+ * were stacking scattergeo points and showing conflicting “best club” hovers.
+ */
+function dedupeCountrySummariesForMap(summaries) {
+  const bySlug = new Map();
+  for (const s of summaries) {
+    const slug = String(s.country_name ?? "").trim().toLowerCase();
+    if (!slug) continue;
+    const prev = bySlug.get(slug);
+    const top = Number(s.top_team_rating);
+    const prevTop = prev != null ? Number(prev.top_team_rating) : NaN;
+    const nextBetter =
+      !prev || (Number.isFinite(top) && (!Number.isFinite(prevTop) || top > prevTop));
+    bySlug.set(slug, nextBetter ? s : prev);
+  }
+  return Array.from(bySlug.values());
+}
+
 /** Title-case country labels from API slugs (e.g. england → England, bosnia-herzegovina → Bosnia-Herzegovina). */
 function formatCountryDisplay(name) {
   if (name == null || name === "") return "";
@@ -1310,6 +1329,11 @@ function App() {
     [teams, selectedTeamId]
   );
 
+  const dedupedCountrySummaries = useMemo(
+    () => dedupeCountrySummariesForMap(countrySummaries),
+    [countrySummaries]
+  );
+
   useLayoutEffect(() => {
     if (route.page !== "calibration") return;
     setCalibrationLoading(true);
@@ -1569,9 +1593,9 @@ function App() {
   }, [route.page]);
 
   const europeCountryLadder = useMemo(() => {
-    const rows = (countrySummaries || [])
+    const rows = (dedupedCountrySummaries || [])
       .map((s) => {
-        const slug = String(s.country_name || "").toLowerCase();
+        const slug = String(s.country_name || "").trim().toLowerCase();
         const rating = Number(s.top_team_rating);
         return { ...s, slug, rating };
       })
@@ -1579,16 +1603,16 @@ function App() {
       .sort((a, b) => b.rating - a.rating || a.slug.localeCompare(b.slug));
     const rankBySlug = new Map(rows.map((r, i) => [r.slug, i + 1]));
     return { rows, rankBySlug };
-  }, [countrySummaries]);
+  }, [dedupedCountrySummaries]);
 
   const latestWeekId = useMemo(() => {
     let w = null;
-    for (const s of countrySummaries) {
+    for (const s of dedupedCountrySummaries) {
       const v = Number(s.week);
       if (Number.isFinite(v)) w = w == null ? v : Math.max(w, v);
     }
     return w;
-  }, [countrySummaries]);
+  }, [dedupedCountrySummaries]);
 
   const latestWeekDateIso = useMemo(() => {
     const hit = latestRatingsRows.find((row) => row.week_date);
@@ -1626,9 +1650,11 @@ function App() {
 
   const summaryByCountry = useMemo(() => {
     const map = new Map();
-    countrySummaries.forEach((item) => map.set(item.country_name.toLowerCase(), item));
+    dedupedCountrySummaries.forEach((item) =>
+      map.set(String(item.country_name || "").trim().toLowerCase(), item)
+    );
     return map;
-  }, [countrySummaries]);
+  }, [dedupedCountrySummaries]);
 
   const selectedCountrySummary = selectedCountry
     ? summaryByCountry.get(selectedCountry.toLowerCase())
@@ -1639,9 +1665,9 @@ function App() {
     : null;
 
   const mapPoints = useMemo(() => {
-    const withSummaries = countrySummaries
+    const withSummaries = dedupedCountrySummaries
       .map((summary) => {
-        const key = String(summary.country_name || "").toLowerCase();
+        const key = String(summary.country_name || "").trim().toLowerCase();
         const coords = COUNTRY_MAP_COORDS[key];
         if (!coords) return null;
         return { ...summary, ...coords };
@@ -1668,7 +1694,7 @@ function App() {
         };
       })
       .filter(Boolean);
-  }, [countrySummaries, countries]);
+  }, [dedupedCountrySummaries, countries]);
 
   const heatVals = mapPoints.map(mapHeatValue);
   const minHeat = heatVals.length > 0 ? Math.min(...heatVals) : 0;
@@ -1744,7 +1770,10 @@ function App() {
           "<b>%{customdata[0]}</b><br>Best club: %{customdata[1]}<br>Rating: %{customdata[4]:.0f}<br>European rank: %{customdata[2]}<extra></extra>",
         marker: {
           size: markerOnlyPoints.map((p) => {
-            const idx = mapPoints.findIndex((m) => m.country_name === p.country_name);
+            const slug = String(p.country_name || "").trim().toLowerCase();
+            const idx = mapPoints.findIndex(
+              (m) => String(m.country_name || "").trim().toLowerCase() === slug
+            );
             return idx >= 0 ? markerSizes[idx] : 14;
           }),
           color: markerOnlyPoints.map(mapHeatValue),
@@ -2438,7 +2467,7 @@ function App() {
             <article className="dashboard-kpi-card">
               <p className="dashboard-kpi-label">Countries Rated</p>
               <p className="dashboard-kpi-value">
-                {countrySummaries.length > 0 ? countrySummaries.length : loading ? "…" : "—"}
+                {dedupedCountrySummaries.length > 0 ? dedupedCountrySummaries.length : loading ? "…" : "—"}
               </p>
             </article>
           </section>
@@ -2494,7 +2523,7 @@ function App() {
                         </div>
                         <div>
                           <dt>Countries rated</dt>
-                          <dd>{countrySummaries.length || "—"}</dd>
+                          <dd>{dedupedCountrySummaries.length || "—"}</dd>
                         </div>
                         <div>
                           <dt>Highest rated club</dt>

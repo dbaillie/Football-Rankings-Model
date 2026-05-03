@@ -172,13 +172,13 @@ def load_teams() -> pd.DataFrame:
         teams = pd.read_sql(text("SELECT * FROM fr_teams"), get_engine())
         teams = teams.rename(columns={"team_id": "pid"})
         teams["pid"] = teams["pid"].astype(int)
-        teams["country_name"] = teams["country_name"].fillna("unknown")
+        teams["country_name"] = teams["country_name"].fillna("unknown").astype(str).str.strip()
         return teams
 
     teams = pd.read_csv(OUTPUT_DIR / "europe_teams.csv")
     teams = teams.rename(columns={"team_id": "pid"})
     teams["pid"] = teams["pid"].astype(int)
-    teams["country_name"] = teams["country_name"].fillna("unknown")
+    teams["country_name"] = teams["country_name"].fillna("unknown").astype(str).str.strip()
     return teams
 
 
@@ -191,8 +191,8 @@ def _finalize_weekly_ratings_frame(weekly: pd.DataFrame) -> pd.DataFrame:
     weekly = weekly[weekly["week"] >= ANALYTICAL_START_WEEK].copy()
     weekly["week_date"] = weekly["week"].apply(week_to_date)
     weekly["week_date"] = weekly["week_date"].dt.strftime("%Y-%m-%d")
-    weekly["country_name"] = weekly["country_name"].fillna("unknown").astype(str)
-    weekly["team_name"] = weekly["team_name"].fillna("Unknown Team").astype(str)
+    weekly["country_name"] = weekly["country_name"].fillna("unknown").astype(str).str.strip()
+    weekly["team_name"] = weekly["team_name"].fillna("Unknown Team").astype(str).str.strip()
     return weekly
 
 
@@ -256,8 +256,8 @@ def load_final_ratings() -> pd.DataFrame:
         from .database import get_engine
 
         ratings = pd.read_sql(text("SELECT * FROM fr_europe_ratings"), get_engine())
-        ratings["country_name"] = ratings["country_name"].fillna("unknown").astype(str)
-        ratings["team_name"] = ratings["team_name"].fillna("Unknown Team").astype(str)
+        ratings["country_name"] = ratings["country_name"].fillna("unknown").astype(str).str.strip()
+        ratings["team_name"] = ratings["team_name"].fillna("Unknown Team").astype(str).str.strip()
         return ratings
 
     ratings = pd.read_csv(
@@ -265,8 +265,8 @@ def load_final_ratings() -> pd.DataFrame:
         dtype={"country_name": "string", "team_name": "string"},
         low_memory=False,
     )
-    ratings["country_name"] = ratings["country_name"].fillna("unknown").astype(str)
-    ratings["team_name"] = ratings["team_name"].fillna("Unknown Team").astype(str)
+    ratings["country_name"] = ratings["country_name"].fillna("unknown").astype(str).str.strip()
+    ratings["team_name"] = ratings["team_name"].fillna("Unknown Team").astype(str).str.strip()
     return ratings
 
 
@@ -751,6 +751,8 @@ def get_country_summaries() -> list[dict[str, Any]]:
     latest = latest[~(is_international_country | is_international_name)]
     if latest.empty:
         return []
+
+    latest["country_name"] = latest["country_name"].astype(str).str.strip()
 
     mean_col = ladder_sort_column(latest)
     country_stats = (
