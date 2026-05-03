@@ -83,7 +83,9 @@ NARRATIVE_LADDER_DROP_FIRST_N_WEEKS = max(
 
 
 def ladder_sort_column(weekly: pd.DataFrame) -> str:
-    """Rank column: simple adjusted strength > GCAM adjusted > raw Glicko."""
+    """Rank column for ladders, map aggregates, and snapshots: raw Glicko μ (`rating`)."""
+    if not weekly.empty and "rating" in weekly.columns:
+        return "rating"
     if weekly.empty:
         return "rating"
     if "simple_adjusted_rating" in weekly.columns:
@@ -94,14 +96,8 @@ def ladder_sort_column(weekly: pd.DataFrame) -> str:
 
 
 def strength_chart_column(weekly: pd.DataFrame) -> str:
-    """Time-series strength: simple adjusted when present, else GCAM adjusted, else raw Glicko."""
-    if weekly.empty:
-        return "rating"
-    if "simple_adjusted_rating" in weekly.columns:
-        return "simple_adjusted_rating"
-    if "adjusted_rating" in weekly.columns and weekly["adjusted_rating"].notna().any():
-        return "adjusted_rating"
-    return "rating"
+    """Weekly time-series charts use the same strength column as ladder ranking (raw Glicko when present)."""
+    return ladder_sort_column(weekly)
 
 
 def narrative_ladder_week_allowlist(weekly: pd.DataFrame) -> frozenset[int] | None:

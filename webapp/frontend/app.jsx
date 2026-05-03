@@ -30,24 +30,9 @@ const MAP_HEAT_COLORSCALE = [
   [1, "#93c5fd"],
 ];
 
-/** Weekly series: prefer simple adjusted column whenever any week has it; else GCAM adjusted; else raw Glicko. */
-function pickTeamStrengthSeriesKey(teamSeries) {
-  if (!teamSeries || teamSeries.length === 0) return "rating";
-  if (teamSeries.some((r) => r.simple_adjusted_rating != null)) return "simple_adjusted_rating";
-  if (teamSeries.some((r) => r.adjusted_rating != null)) return "adjusted_rating";
-  return "rating";
-}
-
-/** Glicko strength only (for “Raw” column). */
+/** Glicko μ for snapshot table sorting and display. */
 function snapshotRawValue(row) {
   const v = Number(row.rating);
-  return Number.isFinite(v) ? v : null;
-}
-
-/** Simple diffusion-adjusted strength only (“Info Diffused”). */
-function snapshotInfoDiffusedValue(row) {
-  if (row.simple_adjusted_rating == null) return null;
-  const v = Number(row.simple_adjusted_rating);
   return Number.isFinite(v) ? v : null;
 }
 
@@ -57,7 +42,7 @@ function formatSnapshotStrengthCell(value) {
 }
 
 /**
- * Comparator for sorting snapshot rows by raw or info-diffused numeric.
+ * Comparator for sorting snapshot rows by Glicko rating.
  * Returns numeric compare (a − b); nulls sort after finite values for both ascending and descending sorts.
  */
 function compareSnapshotNumeric(aNum, bNum) {
@@ -67,12 +52,6 @@ function compareSnapshotNumeric(aNum, bNum) {
   if (aMiss) return 1;
   if (bMiss) return -1;
   return aNum - bNum;
-}
-
-function compareSnapshotRowsForSort(a, b, sortKey) {
-  const ra = sortKey === "raw" ? snapshotRawValue(a) : snapshotInfoDiffusedValue(a);
-  const rb = sortKey === "raw" ? snapshotRawValue(b) : snapshotInfoDiffusedValue(b);
-  return compareSnapshotNumeric(ra, rb);
 }
 
 function CompetitionBadge({ code }) {
@@ -287,6 +266,9 @@ function parseHashRouteFromString(hash) {
   if (segments[0] === "info") {
     return { page: "info" };
   }
+  if (segments[0] === "diffused") {
+    return { page: "diffused" };
+  }
   if (segments[0] === "calibration") {
     return { page: "calibration" };
   }
@@ -470,6 +452,79 @@ function ContactForm() {
   );
 }
 
+/** Conceptual overview of “diffused” / comparability strength (not plotted on the main dashboard). */
+function DiffusedPage({ navigate }) {
+  return (
+    <>
+      <header className="page-hero">
+        <h1>Diffused strength</h1>
+        <p className="small">
+          Why an optional layer exists next to raw Glicko, and why this site keeps browsing on{" "}
+          <strong>rating</strong> (μ).
+        </p>
+      </header>
+
+      <div className="card">
+        <h2>Raw Glicko first</h2>
+        <p className="small" style={{ marginBottom: "12px" }}>
+          Glicko-2 produces a mean strength <strong>μ</strong> and uncertainty for each club from results. That update is
+          the authoritative sporting signal: it is tuned for prediction within the rating system and respects sparse play.
+        </p>
+        <p className="small" style={{ marginBottom: 0 }}>
+          The dashboard map, country charts, club trajectories, top table, and generated narratives therefore read{" "}
+          <strong>rating</strong> so what you see matches the core model output.
+        </p>
+      </div>
+
+      <div className="card">
+        <h2>What “diffused” means here</h2>
+        <p className="small" style={{ marginBottom: "12px" }}>
+          Clubs in different leagues rarely face the same opponent pool. Raw μ ranks everyone inside one European run, but
+          interpreting <em>how hard</em> a path looked — domestic-only vs heavy European minutes — is a separate
+          question from the week-to-week Glicko step.
+        </p>
+        <p className="small" style={{ marginBottom: "12px" }}>
+          The <strong>simple adjusted</strong> / comparability layer treats schedule exposure a bit like diffusion across
+          contexts: strength estimates can be nudged toward anchors informed by who you played and where (with shrink when
+          the signal is thin). It is a descriptive lens for cross-context storytelling, not a replacement for the Glicko
+          update itself.
+        </p>
+        <p className="small" style={{ marginBottom: 0 }}>
+          When present in the dataset, those columns appear in CSV exports alongside μ. Heavier{" "}
+          <strong>GCAM</strong>-style connectivity and trust metrics stay export-side for diagnostics.
+        </p>
+      </div>
+
+      <div className="card">
+        <h2>Where to read more</h2>
+        <p className="small" style={{ marginBottom: 0 }}>
+          Equations and pipeline notes live on{" "}
+          <a
+            href="#/info"
+            onClick={(e) => {
+              e.preventDefault();
+              navigate("/info");
+            }}
+          >
+            Info
+          </a>
+          . To return to the live ratings UI:{" "}
+          <a
+            href="#/"
+            onClick={(e) => {
+              e.preventDefault();
+              navigate("/");
+            }}
+          >
+            Map &amp; top 25
+          </a>
+          .
+        </p>
+      </div>
+    </>
+  );
+}
+
 /** Renders narrative strings that use **markers** as bold (template-controlled; not raw HTML). */
 function InfoPage({ navigate }) {
   return (
@@ -499,12 +554,20 @@ function InfoPage({ navigate }) {
       <div className="card">
         <h2>Comparability strength (simple layer)</h2>
         <p className="small" style={{ marginBottom: 0 }}>
-          After Glicko-2, a <strong>simplified comparability layer</strong> produces{" "}
-          <strong>simple adjusted strength</strong> from cross-context schedule exposure (and optional SOS-style anchors)
-          with one-sided shrink toward that anchor when raw ratings look hard to interpret globally.
-          Charts and the top table use this curve whenever it&apos;s present. Full <strong>GCAM</strong> (connectivity,
-          structural RD, trust) remains in exports for diagnostics; raw Glicko <strong>rating</strong> is always the base
-          estimate before those post-steps.
+          The pipeline can still compute <strong>simple adjusted strength</strong> after Glicko (cross-context schedule
+          exposure and optional SOS-style anchors). That curve is <strong>not</strong> what drives browsing here — it lives
+          mainly in exports and on the{" "}
+          <a
+            href="#/diffused"
+            onClick={(e) => {
+              e.preventDefault();
+              navigate("/diffused");
+            }}
+          >
+            Diffused
+          </a>{" "}
+          page. Full <strong>GCAM</strong> diagnostics (connectivity, structural RD, trust) remain export-side for
+          analysis.
         </p>
       </div>
 
@@ -516,8 +579,12 @@ function InfoPage({ navigate }) {
             tracks; open any club for full fixtures and weekly extremes.
           </li>
           <li>
-            <strong>Ratings</strong> in tables and charts are comparable across clubs that share the same European
-            run; they are descriptive, not betting advice.
+            <strong>Diffused</strong> — plain-language overview of schedule-diffusion / simple-adjusted ideas (not the
+            default strength shown on the dashboard).
+          </li>
+          <li>
+            <strong>Ratings</strong> in tables and charts use raw Glicko μ for clubs in the same European run; they are
+            descriptive, not betting advice.
           </li>
           <li>
             <strong>
@@ -1117,8 +1184,8 @@ function App() {
   const [countryNarrative, setCountryNarrative] = useState(null);
   const [biggestMatches, setBiggestMatches] = useState({ upsets: [], swings: [] });
   const [topSnapshot, setTopSnapshot] = useState([]);
-  /** Top-25 client sort: `'info'` = simple-adjusted (“Info Diffused”), `'raw'` = Glicko rating. */
-  const [snapshotTableSort, setSnapshotTableSort] = useState({ key: "info", dir: "desc" });
+  /** Client reorder of top snapshot by Glicko rating only (server default is newest-week desc). */
+  const [snapshotRatingSortDir, setSnapshotRatingSortDir] = useState("desc");
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -1386,17 +1453,15 @@ function App() {
         sensitivity: "base",
       });
     rows.sort((a, b) => {
-      const cmp = compareSnapshotRowsForSort(a, b, snapshotTableSort.key);
-      if (cmp !== 0) return snapshotTableSort.dir === "desc" ? -cmp : cmp;
+      const cmp = compareSnapshotNumeric(snapshotRawValue(a), snapshotRawValue(b));
+      if (cmp !== 0) return snapshotRatingSortDir === "desc" ? -cmp : cmp;
       return tieBreak(a, b);
     });
     return rows;
-  }, [topSnapshot, snapshotTableSort]);
+  }, [topSnapshot, snapshotRatingSortDir]);
 
-  const cycleSnapshotSort = React.useCallback((key) => {
-    setSnapshotTableSort((prev) =>
-      prev.key !== key ? { key, dir: "desc" } : { key, dir: prev.dir === "desc" ? "asc" : "desc" },
-    );
+  const toggleSnapshotRatingSort = React.useCallback(() => {
+    setSnapshotRatingSortDir((d) => (d === "desc" ? "asc" : "desc"));
   }, []);
 
   const summaryByCountry = useMemo(() => {
@@ -1496,7 +1561,7 @@ function App() {
         len: 0.62,
         thickness: 14,
         title: {
-          text: "Best team rating",
+          text: "Best team Glicko rating",
           font: { color: THEME.muted, size: 12 },
           side: "bottom",
         },
@@ -1592,7 +1657,7 @@ function App() {
       linecolor: "#334155",
     },
     yaxis: {
-      title: { text: "Simple adjusted strength", font: { color: THEME.muted, size: 12 } },
+      title: { text: "Glicko rating", font: { color: THEME.muted, size: 12 } },
       gridcolor: "#334155",
       zerolinecolor: "#334155",
       tickfont: { color: THEME.muted, size: 11 },
@@ -1601,8 +1666,6 @@ function App() {
     },
     margin: { l: 50, r: 20, t: 24, b: 40 },
   };
-
-  const teamStrengthKey = pickTeamStrengthSeriesKey(teamSeries);
 
   const teamPlotLayout = {
     font: { color: THEME.text },
@@ -1623,15 +1686,7 @@ function App() {
       linecolor: "#334155",
     },
     yaxis: {
-      title: {
-        text:
-          teamStrengthKey === "simple_adjusted_rating"
-            ? "Simple adjusted strength"
-            : teamStrengthKey === "adjusted_rating"
-              ? "Adjusted strength (GCAM)"
-              : "Rating",
-        font: { color: THEME.muted, size: 12 },
-      },
+      title: { text: "Glicko rating", font: { color: THEME.muted, size: 12 } },
       gridcolor: "#334155",
       zerolinecolor: "#334155",
       tickfont: { color: THEME.muted, size: 11 },
@@ -1644,7 +1699,7 @@ function App() {
   const teamTrendData = [
     {
       x: teamSeries.map((d) => d.week_date),
-      y: teamSeries.map((d) => Number(d[teamStrengthKey] ?? d.rating)),
+      y: teamSeries.map((d) => Number(d.rating)),
       mode: "lines",
       type: "scatter",
       name: selectedTeam ? selectedTeam.team_name : "Team",
@@ -1721,6 +1776,16 @@ function App() {
             </a>
             <a
               className="link-btn link-btn--header"
+              href="#/diffused"
+              onClick={(e) => {
+                e.preventDefault();
+                navigate("/diffused");
+              }}
+            >
+              Diffused
+            </a>
+            <a
+              className="link-btn link-btn--header"
               href="#/info"
               onClick={(e) => {
                 e.preventDefault();
@@ -1733,12 +1798,18 @@ function App() {
         </div>
       </header>
       <main id="main-content" className="container">
-      {error && route.page !== "club" && route.page !== "info" && route.page !== "calibration" && (
+      {error &&
+        route.page !== "club" &&
+        route.page !== "info" &&
+        route.page !== "diffused" &&
+        route.page !== "calibration" && (
         <div className="card error">{error}</div>
       )}
 
       {route.page === "info" ? (
         <InfoPage navigate={navigate} />
+      ) : route.page === "diffused" ? (
+        <DiffusedPage navigate={navigate} />
       ) : route.page === "calibration" ? (
         <CalibrationPage
           navigate={navigate}
@@ -2068,7 +2139,18 @@ function App() {
             <p className="sub-head">Ratings · European clubs</p>
             <h1>Ratings dashboard</h1>
             <p className="small">
-              Hover countries for a snapshot; <strong>click</strong> to open detail. Rankings below stay in sync with the latest rating week.
+              Hover countries for a snapshot; <strong>click</strong> to open detail. Rankings below use{" "}
+              <strong>Glicko rating</strong> for the latest rating week (see{" "}
+              <a
+                href="#/diffused"
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate("/diffused");
+                }}
+              >
+                Diffused
+              </a>{" "}
+              for an optional comparability lens).
             </p>
           </header>
 
@@ -2121,10 +2203,9 @@ function App() {
           <div className="card">
             <h2>Current top 25</h2>
             <p className="small" style={{ marginTop: "-8px", marginBottom: "14px" }}>
-              Latest rating week. Only clubs with more than five matches in each of 2024, 2025, and 2026 appear here
-              and on the map (see About). Rows are clickable — open a club&apos;s full history. Click{" "}
-              <strong>Raw</strong> or <strong>Info Diffused</strong> to sort; default matches server order by Info
-              Diffused.
+              Latest rating week by <strong>Glicko rating</strong>. Only clubs with more than five matches in each of 2024,
+              2025, and 2026 appear here and on the map (see About). Rows are clickable — open a club&apos;s full history.
+              Click the rating header to flip ascending / descending (default matches server order).
             </p>
             <div className="table-scroll">
             <table>
@@ -2133,58 +2214,20 @@ function App() {
                   <th>#</th>
                   <th>Team</th>
                   <th>Country</th>
-                  <th
-                    scope="col"
-                    aria-sort={
-                      snapshotTableSort.key === "info"
-                        ? snapshotTableSort.dir === "desc"
-                          ? "descending"
-                          : "ascending"
-                        : undefined
-                    }
-                  >
+                  <th scope="col" aria-sort={snapshotRatingSortDir === "desc" ? "descending" : "ascending"}>
                     <button
                       type="button"
                       className="th-sort-btn"
-                      title="Sort by diffusion-adjusted strength"
+                      title="Sort by Glicko rating"
                       onClick={(e) => {
                         e.stopPropagation();
-                        cycleSnapshotSort("info");
+                        toggleSnapshotRatingSort();
                       }}
                     >
-                      Info Diffused
-                      {snapshotTableSort.key === "info" ? (
-                        <span className="th-sort-indicator" aria-hidden>
-                          {snapshotTableSort.dir === "desc" ? "▼" : "▲"}
-                        </span>
-                      ) : null}
-                    </button>
-                  </th>
-                  <th
-                    scope="col"
-                    aria-sort={
-                      snapshotTableSort.key === "raw"
-                        ? snapshotTableSort.dir === "desc"
-                          ? "descending"
-                          : "ascending"
-                        : undefined
-                    }
-                  >
-                    <button
-                      type="button"
-                      className="th-sort-btn"
-                      title="Sort by raw Glicko rating"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        cycleSnapshotSort("raw");
-                      }}
-                    >
-                      Raw
-                      {snapshotTableSort.key === "raw" ? (
-                        <span className="th-sort-indicator" aria-hidden>
-                          {snapshotTableSort.dir === "desc" ? "▼" : "▲"}
-                        </span>
-                      ) : null}
+                      Glicko rating
+                      <span className="th-sort-indicator" aria-hidden>
+                        {snapshotRatingSortDir === "desc" ? "▼" : "▲"}
+                      </span>
                     </button>
                   </th>
                   <th>{topSnapshot.some((r) => r.total_rd != null) ? "RD (total)" : "RD"}</th>
@@ -2211,10 +2254,7 @@ function App() {
                     </td>
                     <td>{row.team_name}</td>
                     <td>{formatCountryDisplay(row.country_name)}</td>
-                    <td className="rating-strong">
-                      {formatSnapshotStrengthCell(snapshotInfoDiffusedValue(row))}
-                    </td>
-                    <td>{formatSnapshotStrengthCell(snapshotRawValue(row))}</td>
+                    <td className="rating-strong">{formatSnapshotStrengthCell(snapshotRawValue(row))}</td>
                     <td>{(row.total_rd != null ? Number(row.total_rd) : Number(row.rd)).toFixed(1)}</td>
                   </tr>
                 ))}
