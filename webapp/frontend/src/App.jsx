@@ -117,6 +117,12 @@ function mapHeatValue(p) {
   return Number.isFinite(avg) ? avg : 1500;
 }
 
+function friendlyHttpStatusMessage(status) {
+  if (status === 404) return "That content wasn't found.";
+  if (status >= 500) return "The service is temporarily unavailable. Please try again.";
+  return "Something went wrong. Please try again.";
+}
+
 async function getJson(url, options = {}) {
   const { allow404 = false, timeoutMs = null } = options;
   const ctrl = new AbortController();
@@ -132,28 +138,17 @@ async function getJson(url, options = {}) {
       return null;
     }
     if (!response.ok) {
-      let detail = text.slice(0, 400);
-      try {
-        const body = JSON.parse(text);
-        if (body && body.detail !== undefined) {
-          detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
-        }
-      } catch (_) {
-        /* ignore */
-      }
-      throw new Error(`Request failed: ${response.status} (${detail})`);
+      throw new Error(friendlyHttpStatusMessage(response.status));
     }
     if (!text) return null;
     try {
       return JSON.parse(text);
-    } catch (parseErr) {
-      throw new Error(`Invalid JSON (HTTP ${response.status}): ${String(parseErr.message)} — ${text.slice(0, 120)}…`);
+    } catch {
+      throw new Error("Something went wrong loading data. Please try again.");
     }
   } catch (err) {
     if (err.name === "AbortError") {
-      throw new Error(
-        `Request timed out after ${Math.round((timeoutMs || 0) / 1000)}s — is the API running and CSV preload finished?`
-      );
+      throw new Error("This took too long. Please try again.");
     }
     throw err;
   } finally {
@@ -169,17 +164,14 @@ async function fetchClubDetailWithFallbacks(teamId, timeoutMs) {
     `/api/club/${teamId}`,
     `/api/team/${teamId}/club-detail`,
   ];
-  const failures = [];
   for (const path of urls) {
     try {
       return await getJson(path, { timeoutMs });
-    } catch (e) {
-      failures.push(`${path} → ${e.message}`);
+    } catch {
+      /* try next path */
     }
   }
-  throw new Error(
-    `Could not load club data.\n${failures.join("\n")}\n\nQuick checks:\n• GET /api/ping-club (must return JSON — if 404, wrong server or old code)\n• GET /api/clubdata?team_id=${teamId} (query-form club JSON)\n• GET /api/teams/${teamId}/identity\n• GET /api/health\n• From repo root run: python run_server.py`
-  );
+  throw new Error("We couldn't load this club's page. Please try again.");
 }
 
 function Plot({ data, layout, config, onClick, onHover, className, mapChart = false }) {
@@ -355,7 +347,7 @@ function InfoPage({ navigate }) {
   return (
     <>
       <header className="page-hero">
-        <h1>How the ratings work</h1>
+        <h1>How the Ratings Work</h1>
         <p className="small">
           What the numbers mean, how they&apos;re produced, and how to read this site — without diving into
           implementation detail.
@@ -363,7 +355,7 @@ function InfoPage({ navigate }) {
       </header>
 
       <div className="card">
-        <h2>Rating system</h2>
+        <h2>Rating System</h2>
         <p className="small" style={{ marginBottom: "12px" }}>
           Each club has a <strong>rating</strong> (strength estimate) and uncertainty that update after matches.
           The model uses <strong>Glicko-2</strong>, an extension of Elo suited to intermittent play: results are
@@ -377,7 +369,7 @@ function InfoPage({ navigate }) {
       </div>
 
       <div className="card">
-        <h2>Glicko-2 — core ideas</h2>
+        <h2>Glicko-2 — Core Ideas</h2>
         <p className="small" style={{ marginBottom: "12px" }}>
           Each club has a mean strength <strong>μ</strong>, an uncertainty band around it (<strong>φ</strong>,
           sometimes called rating deviation), and a volatility term <strong>σ</strong>. Each week, wins, draws, and
@@ -421,7 +413,7 @@ function InfoPage({ navigate }) {
       </div>
 
       <div className="card">
-        <h2>Schedule comparability (optional layer)</h2>
+        <h2>Schedule Comparability (Optional Layer)</h2>
         <p className="small" style={{ marginBottom: 0 }}>
           Behind the scenes the project can also derive <strong>simple adjusted strength</strong> after Glicko —
           blending cross-league schedule exposure and optional strength-of-schedule anchors.{" "}
@@ -436,12 +428,12 @@ function InfoPage({ navigate }) {
           >
             Diffused
           </a>
-          . Richer connectivity-style diagnostics stay in exports for analysts who want them.
+          .
         </p>
       </div>
 
       <div className="card">
-        <h2>Using this site</h2>
+        <h2>Using This Site</h2>
         <ul className="small info-list">
           <li>
             <strong>Dashboard</strong> — explore Europe on the map, compare countries, open clubs for fixtures and
@@ -473,11 +465,11 @@ function InfoPage({ navigate }) {
       </div>
 
       <div className="card">
-        <h2>Automated country &amp; club notes</h2>
+        <h2>Automated Country &amp; Club Notes</h2>
         <p className="small" style={{ marginBottom: "12px" }}>
           The short prose blocks on country and club pages are <strong>generated from the same rating history</strong>{" "}
-          as the charts — they are not hand-edited match reports. Only clubs that meet the site&apos;s visibility
-          rules (enough recent seasons played) appear on the map and in those summaries.
+          as the charts — they are not hand-edited match reports. Only clubs with enough matches in recent seasons
+          appear on the map and in those summaries.
         </p>
         <ul className="small info-list" style={{ marginBottom: "12px" }}>
           <li>
@@ -505,18 +497,6 @@ function InfoPage({ navigate }) {
           Built by <strong>Douglas Baillie</strong>. Contact:{" "}
           <a href="mailto:douglasbaillie@live.co.uk">douglasbaillie@live.co.uk</a>
         </p>
-        <p style={{ marginBottom: 0, marginTop: "16px" }}>
-          <a
-            className="link-btn link-btn--primary"
-            href="#/"
-            onClick={(e) => {
-              e.preventDefault();
-              navigate("/");
-            }}
-          >
-            ← Back to dashboard
-          </a>
-        </p>
       </div>
     </>
   );
@@ -527,7 +507,7 @@ function DiffusedPage({ navigate }) {
   return (
     <>
       <header className="page-hero">
-        <h1>Diffused strength</h1>
+        <h1>Diffused Strength</h1>
         <p className="small">
           Why an optional layer exists next to raw Glicko, and why this site keeps browsing on{" "}
           <strong>rating</strong> (μ).
@@ -535,7 +515,7 @@ function DiffusedPage({ navigate }) {
       </header>
 
       <div className="card">
-        <h2>Raw Glicko first</h2>
+        <h2>Raw Glicko First</h2>
         <p className="small" style={{ marginBottom: "12px" }}>
           Glicko-2 produces a mean strength <strong>μ</strong> and uncertainty for each club from results. That update is
           the authoritative sporting signal: it is tuned for prediction within the rating system and respects sparse play.
@@ -547,7 +527,7 @@ function DiffusedPage({ navigate }) {
       </div>
 
       <div className="card">
-        <h2>What “diffused” means here</h2>
+        <h2>What “Diffused” Means Here</h2>
         <p className="small" style={{ marginBottom: "12px" }}>
           Clubs in different leagues rarely face the same opponent pool. Raw μ ranks everyone inside one European run, but
           interpreting <em>how hard</em> a path looked — domestic-only vs heavy European minutes — is a separate
@@ -562,9 +542,9 @@ function DiffusedPage({ navigate }) {
       </div>
 
       <div className="card">
-        <h2>Where to read more</h2>
+        <h2>Where to Read More</h2>
         <p className="small" style={{ marginBottom: 0 }}>
-          Equations and pipeline notes live on{" "}
+          Background and formulas are on{" "}
           <a
             href="#/info"
             onClick={(e) => {
@@ -582,7 +562,7 @@ function DiffusedPage({ navigate }) {
               navigate("/");
             }}
           >
-            Map &amp; top 25
+            Map &amp; Top 25
           </a>
           .
         </p>
@@ -634,7 +614,7 @@ function CalibrationPage({ navigate, data, loading, error }) {
       b.rating_diff_low,
       b.rating_diff_high,
       b.n,
-      b.low_n ? "yes" : "no",
+      b.low_n ? "(few matches)" : "",
       b.mean_rating_diff,
     ]);
 
@@ -663,10 +643,10 @@ function CalibrationPage({ navigate, data, loading, error }) {
           line: { width: 0 },
         },
         hovertemplate:
-          "Rating diff (mid): %{x:.0f}<br>" +
-          "Realised mean score: %{y:.3f}<br>" +
-          "Bin [%{customdata[0]:.0f}, %{customdata[1]:.0f}), n=%{customdata[2]}, sparse bin: %{customdata[3]}<br>" +
-          "Mean diff in bin: %{customdata[4]:.1f}<extra></extra>",
+          "Rating gap (centre): %{x:.0f}<br>" +
+          "Mean score (0–1): %{y:.3f}<br>" +
+          "Band [%{customdata[0]:.0f}, %{customdata[1]:.0f}) · %{customdata[2]} matches %{customdata[3]}<br>" +
+          "Mean rating gap in band: %{customdata[4]:.1f}<extra></extra>",
       },
       {
         x,
@@ -682,9 +662,9 @@ function CalibrationPage({ navigate, data, loading, error }) {
           line: { width: 0 },
         },
         hovertemplate:
-          "Rating diff (mid): %{x:.0f}<br>" +
-          "Mean pred.: %{y:.3f}<br>" +
-          "Bin [%{customdata[0]:.0f}, %{customdata[1]:.0f}), n=%{customdata[2]}<extra></extra>",
+          "Rating gap (centre): %{x:.0f}<br>" +
+          "Model expectation: %{y:.3f}<br>" +
+          "Band [%{customdata[0]:.0f}, %{customdata[1]:.0f}) · %{customdata[2]} matches %{customdata[3]}<extra></extra>",
       },
       {
         x,
@@ -700,9 +680,9 @@ function CalibrationPage({ navigate, data, loading, error }) {
           line: { width: 0 },
         },
         hovertemplate:
-          "Rating diff (mid): %{x:.0f}<br>" +
-          "Elo expectation: %{y:.3f}<br>" +
-          "Bin [%{customdata[0]:.0f}, %{customdata[1]:.0f}), n=%{customdata[2]}<extra></extra>",
+          "Rating gap (centre): %{x:.0f}<br>" +
+          "Reference curve: %{y:.3f}<br>" +
+          "Band [%{customdata[0]:.0f}, %{customdata[1]:.0f}) · %{customdata[2]} matches %{customdata[3]}<extra></extra>",
       },
     ];
 
@@ -722,9 +702,9 @@ function CalibrationPage({ navigate, data, loading, error }) {
           line: { width: 0 },
         },
         hovertemplate:
-          "Rating diff (mid): %{x:.0f}<br>" +
-          "Empirical P(home win): %{y:.3f}<br>" +
-          "Bin [%{customdata[0]:.0f}, %{customdata[1]:.0f}), n=%{customdata[2]}<extra></extra>",
+          "Rating gap (centre): %{x:.0f}<br>" +
+          "Observed home-win rate: %{y:.3f}<br>" +
+          "Band [%{customdata[0]:.0f}, %{customdata[1]:.0f}) · %{customdata[2]} matches %{customdata[3]}<extra></extra>",
       });
     }
 
@@ -770,9 +750,9 @@ function CalibrationPage({ navigate, data, loading, error }) {
         line: { color: "#A78BFA", width: 2 },
         marker: { size: bins.map((b) => (b.low_n ? 6 : 9)), color: "#A78BFA" },
         hovertemplate:
-          "Rating diff (mid): %{x:.0f}<br>" +
-          "P(home win): %{y:.3f}<br>" +
-          "n=%{customdata[2]}<extra></extra>",
+          "Rating gap (centre): %{x:.0f}<br>" +
+          "Home wins: %{y:.3f}<br>" +
+          "%{customdata[2]} matches %{customdata[3]}<extra></extra>",
       },
       {
         x,
@@ -784,9 +764,9 @@ function CalibrationPage({ navigate, data, loading, error }) {
         line: { color: "#2DD4BF", width: 2 },
         marker: { size: bins.map((b) => (b.low_n ? 6 : 9)), color: "#2DD4BF" },
         hovertemplate:
-          "Rating diff (mid): %{x:.0f}<br>" +
-          "P(draw): %{y:.3f}<br>" +
-          "n=%{customdata[2]}<extra></extra>",
+          "Rating gap (centre): %{x:.0f}<br>" +
+          "Draws: %{y:.3f}<br>" +
+          "%{customdata[2]} matches %{customdata[3]}<extra></extra>",
       },
       {
         x,
@@ -798,9 +778,9 @@ function CalibrationPage({ navigate, data, loading, error }) {
         line: { color: "#FB923C", width: 2 },
         marker: { size: bins.map((b) => (b.low_n ? 6 : 9)), color: "#FB923C" },
         hovertemplate:
-          "Rating diff (mid): %{x:.0f}<br>" +
-          "P(away win): %{y:.3f}<br>" +
-          "n=%{customdata[2]}<extra></extra>",
+          "Rating gap (centre): %{x:.0f}<br>" +
+          "Away wins: %{y:.3f}<br>" +
+          "%{customdata[2]} matches %{customdata[3]}<extra></extra>",
       },
     ];
 
@@ -846,32 +826,28 @@ function CalibrationPage({ navigate, data, loading, error }) {
             navigate("/");
           }}
         >
-          ← Map & rankings
+          ← Map & Rankings
         </a>
       </nav>
 
       <header className="page-hero">
-        <p className="sub-head">Model diagnostics</p>
-        <h1>Prediction calibration</h1>
+        <p className="sub-head">Forecast Quality</p>
+        <h1>Prediction Calibration</h1>
         <p className="small">
-          Matches are grouped by <strong>home pre-rating minus away pre-rating</strong> (same snapshots as the upset
-          heuristic). Compare mean <strong>realised score</strong> (win&nbsp;=&nbsp;1, draw&nbsp;=&nbsp;0.5, loss
-          &nbsp;=&nbsp;0) to the engine&apos;s mean <strong>Glicko expectation</strong> and a simple Elo-style curve.
+          Fixtures are grouped by how much stronger the home side was on paper before kick-off (home rating minus away
+          rating). For each band you can compare typical <strong>results</strong> (win&nbsp;=&nbsp;1, draw&nbsp;=&nbsp;0.5,
+          loss&nbsp;=&nbsp;0) with the model&apos;s average expectation and a simple reference curve — a sanity check
+          that forecasts behave sensibly across mismatches.
         </p>
       </header>
 
       {loading ? (
         <div className="card card-muted loading-pulse">
-          <p>Loading calibration…</p>
+          <p>Loading calibration charts…</p>
         </div>
       ) : error ? (
         <div className="card error">
-          <p style={{ marginBottom: "12px" }}>{error}</p>
-          <p className="small" style={{ marginBottom: "14px" }}>
-            Generate JSON first from the repo root:{" "}
-            <code style={{ wordBreak: "break-all" }}>python scripts/analyse_europe_calibration.py</code>
-            then reload the API (<code>POST /api/reload</code> if the server was already running).
-          </p>
+          <p style={{ marginBottom: "14px" }}>{error}</p>
           <a
             className="link-btn"
             href="#/"
@@ -880,12 +856,12 @@ function CalibrationPage({ navigate, data, loading, error }) {
               navigate("/");
             }}
           >
-            Back home
+            Back Home
           </a>
         </div>
       ) : !bins.length ? (
         <div className="card card-muted">
-          <p>No calibration bins in the payload.</p>
+          <p>Calibration charts aren&apos;t available yet.</p>
         </div>
       ) : (
         <>
@@ -899,21 +875,19 @@ function CalibrationPage({ navigate, data, loading, error }) {
                   : counts.merged_rows_used_after_dropna != null
                     ? counts.merged_rows_used_after_dropna
                     : null;
-              const nDropna =
-                counts.merged_rows_after_dropna != null ? counts.merged_rows_after_dropna : nUsed;
               return (
                 <>
                   <p className="small" style={{ marginTop: "-8px", marginBottom: "10px" }}>
-                    Bin width <strong>{data?.bin_width ?? "—"}</strong> rating points
+                    Each band is <strong>{data?.bin_width ?? "—"}</strong> rating points wide
                     {nUsed != null ? (
                       <>
                         {" "}
-                        · <strong>{Number(nUsed).toLocaleString()}</strong> matches in calibration
+                        · based on <strong>{Number(nUsed).toLocaleString()}</strong> matches
                         {filt.applied ? (
                           <>
                             {" "}
-                            (last <strong>{filt.distinct_weeks_used}</strong> distinct rating weeks{" "}
-                            <strong>{filt.week_id_min}</strong>–<strong>{filt.week_id_max}</strong>)
+                            (rating weeks <strong>{filt.week_id_min}</strong>–<strong>{filt.week_id_max}</strong>,{" "}
+                            <strong>{filt.distinct_weeks_used}</strong> weeks)
                           </>
                         ) : null}
                       </>
@@ -921,20 +895,14 @@ function CalibrationPage({ navigate, data, loading, error }) {
                     {data?.generated_at ? (
                       <>
                         {" "}
-                        · Generated <strong>{String(data.generated_at).slice(0, 19).replace("T", " ")}</strong> UTC
+                        · snapshot <strong>{String(data.generated_at).slice(0, 19).replace("T", " ")}</strong> UTC
                       </>
                     ) : null}
                   </p>
                   {filt.applied && filt.truncated_to_all_available ? (
                     <p className="small" style={{ marginTop: 0, marginBottom: "10px", color: THEME.muted }}>
-                      Requested last <strong>{filt.last_weeks_requested}</strong> rating weeks; file has only{" "}
-                      <strong>{filt.distinct_weeks_available}</strong> distinct weeks — used entire span.
-                    </p>
-                  ) : null}
-                  {filt.applied && nDropna != null && nUsed != null && Number(nDropna) > Number(nUsed) ? (
-                    <p className="small" style={{ marginTop: 0, marginBottom: "10px", color: THEME.muted }}>
-                      <strong>{Number(nDropna).toLocaleString()}</strong> rows after merge/dropna before the week
-                      window.
+                      Fewer weekly snapshots exist than requested; all available history in the dataset was used (
+                      <strong>{filt.distinct_weeks_available}</strong> weeks).
                     </p>
                   ) : null}
                 </>
@@ -945,8 +913,8 @@ function CalibrationPage({ navigate, data, loading, error }) {
                 <thead>
                   <tr>
                     <th>Metric</th>
-                    <th>Glicko pred.</th>
-                    <th>Elo-400 baseline</th>
+                    <th>Glicko Pred.</th>
+                    <th>Elo-400 Baseline</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -977,10 +945,10 @@ function CalibrationPage({ navigate, data, loading, error }) {
                     </td>
                   </tr>
                   <tr>
-                    <td>Mean realised score / mean pred.</td>
+                    <td>Mean outcome vs mean forecast</td>
                     <td colSpan={2} className="small">
-                      {gm.mean_actual_score != null ? Number(gm.mean_actual_score).toFixed(4) : "—"} actual vs{" "}
-                      {gm.mean_pred_pA != null ? Number(gm.mean_pred_pA).toFixed(4) : "—"} pred.
+                      {gm.mean_actual_score != null ? Number(gm.mean_actual_score).toFixed(4) : "—"} realised vs{" "}
+                      {gm.mean_pred_pA != null ? Number(gm.mean_pred_pA).toFixed(4) : "—"} predicted.
                     </td>
                   </tr>
                 </tbody>
@@ -989,10 +957,10 @@ function CalibrationPage({ navigate, data, loading, error }) {
           </div>
 
           <div className="card">
-            <h2>Chart window</h2>
+            <h2>Chart Window</h2>
             <p className="small" style={{ marginTop: "-8px", marginBottom: "14px" }}>
-              Horizontal axis shows pre-match rating difference (home − away). Drag to zoom out for blowouts or zoom in
-              on tight matches.
+              Horizontal axis is how much stronger the home side was rated before kick-off (home minus away). Use the
+              slider to widen or tighten the window around evenly matched games versus heavy favourites.
             </p>
             <label htmlFor="cal-x-span-slider" style={{ display: "block", marginBottom: "10px" }}>
               <span className="small" style={{ fontWeight: 600, color: "var(--text-muted)" }}>
@@ -1013,7 +981,7 @@ function CalibrationPage({ navigate, data, loading, error }) {
               aria-valuemin={50}
               aria-valuemax={xSliderMax}
               aria-valuenow={xAxisHalfSpan}
-              aria-label="Calibration charts horizontal axis half-span in rating points"
+              aria-label="Horizontal chart range around evenly matched games"
               style={{
                 width: "100%",
                 maxWidth: "520px",
@@ -1022,16 +990,16 @@ function CalibrationPage({ navigate, data, loading, error }) {
               }}
             />
             <p className="kbd-hint" style={{ marginTop: "10px", marginBottom: 0 }}>
-              Range up to ±{xSliderMax} from loaded bins (step 25).
+              Maximum span ±{xSliderMax} rating points (steps of 25).
             </p>
           </div>
 
           <div className="card">
-            <h2>Mean score by rating gap</h2>
+            <h2>Mean Score by Rating Gap</h2>
             <p className="small" style={{ marginTop: "-8px", marginBottom: "12px" }}>
-              <strong>X:</strong> bin centre <code>rating_diff_mid</code> (home − away pre-rating).{" "}
-              <strong>Y:</strong> <code>mean_actual_score</code> vs <code>mean_pred_pA</code> (plus Elo baseline).
-              All share the 0–1 vertical scale so empirical home-win rate is comparable to mean score when overlaid.
+              Horizontal axis: pre-match rating gap (home minus away). Vertical axis: average outcome score (0–1 scale)
+              compared with the model expectation and a reference curve. Optional overlay adds observed home-win rate on
+              the same scale for context.
             </p>
             <label
               className="small"
@@ -1049,17 +1017,18 @@ function CalibrationPage({ navigate, data, loading, error }) {
                 checked={overlayHomeWinOnMain}
                 onChange={(e) => setOverlayHomeWinOnMain(e.target.checked)}
               />
-              Overlay <strong>empirical_p_home_win</strong> (diamonds, dashed purple)
+              Overlay <strong>observed home-win rate</strong> (diamond markers, purple dashed line)
             </label>
             <p className="small" style={{ marginTop: "-6px", marginBottom: "12px", color: THEME.muted }}>
-              Fainter markers = sparse bins. Good calibration: realised mean tracks Glicko pred.; P(home win) rises
-              with rating advantage but need not equal mean score (draws count in mean score only).
+              Fainter markers indicate fewer games in that band. Well behaved forecasts sit close to realised outcomes;
+              home-win rate should rise when the home side is favoured, but need not match the mean score line because
+              draws sit in the middle of that scale.
             </p>
             <Plot data={calibrationPlots.mainData} layout={calibrationPlots.mainLayout} />
           </div>
 
           <div className="card">
-            <h2>Empirical W/D/A shares</h2>
+            <h2>Empirical W/D/A Shares</h2>
             <p className="small" style={{ marginTop: "-8px" }}>
               Outcome frequencies within each rating-difference bin (home perspective).
             </p>
@@ -1084,7 +1053,7 @@ function CalibrationPage({ navigate, data, loading, error }) {
                   navigate("/info");
                 }}
               >
-                How ratings work → Info
+                How the Ratings Work (Info)
               </a>
             </p>
           </div>
@@ -1174,10 +1143,10 @@ function App() {
           setCalibrationLoading(false);
         }
       })
-      .catch((err) => {
+      .catch(() => {
         if (!cancelled) {
           setCalibrationData(null);
-          setCalibrationError(err.message || "Failed to load calibration.");
+          setCalibrationError("Calibration isn't available right now. Please try again later.");
           setCalibrationLoading(false);
         }
       });
@@ -1216,8 +1185,8 @@ function App() {
             setSelectedCountry(countriesData[0]);
           }
         }
-      } catch (err) {
-        setError(err.message);
+      } catch {
+        setError("We couldn't load the dashboard. Please refresh the page.");
       } finally {
         setLoading(false);
       }
@@ -1256,8 +1225,8 @@ function App() {
           topIds.find((id) => countryTeams.some((t) => String(t.pid) === id)) ||
           (countryTeams[0] ? String(countryTeams[0].pid) : "");
         setSelectedTeamId(firstPick);
-      } catch (err) {
-        if (!cancelled) setError(err.message);
+      } catch {
+        if (!cancelled) setError("We couldn't load this country's data. Please try again.");
       }
     }
 
@@ -1303,7 +1272,7 @@ function App() {
 
         if (detailOut.status === "rejected") {
           setClubLoading(false);
-          setClubError(detailOut.reason?.message || "Failed to load club");
+          setClubError("We couldn't load this club's page. Please try again.");
           return;
         }
 
@@ -1318,10 +1287,10 @@ function App() {
         ) {
           setClubNarrative(narrativeOut.value);
         }
-      } catch (err) {
+      } catch {
         if (!cancelled) {
           setClubLoading(false);
-          setClubError(err.message || "Failed to load club");
+          setClubError("We couldn't load this club's page. Please try again.");
         }
       }
     })();
@@ -1346,8 +1315,8 @@ function App() {
         if (cancelled) return;
         setTeamSeries(Array.isArray(series) ? series : []);
         setBiggestMatches(matches || { upsets: [], swings: [] });
-      } catch (err) {
-        if (!cancelled) setError(err.message);
+      } catch {
+        if (!cancelled) setError("We couldn't load this team's chart data. Please try again.");
       }
     }
 
@@ -1785,7 +1754,7 @@ function App() {
               height={32}
               decoding="async"
             />
-            Football rankings
+            Football Rankings
           </a>
           <nav className="site-nav" aria-label="Primary">
             <a
@@ -1796,7 +1765,7 @@ function App() {
                 navigate("/");
               }}
             >
-              Map & top 25
+              Map & Top 25
             </a>
             <a
               className="link-btn link-btn--header"
@@ -1862,7 +1831,7 @@ function App() {
                 navigate("/");
               }}
             >
-              ← Map & rankings
+              ← Map & Rankings
             </a>
             {clubCountrySlug ? (
               <a
@@ -1880,26 +1849,9 @@ function App() {
 
           {clubLoading || (loading && !clubDetail && !clubError) ? (
             <div className="card card-muted loading-pulse">
-              <p>Loading club data…</p>
+              <p>Loading club profile…</p>
               <p className="small" style={{ marginBottom: 0 }}>
-                First load reads match history from disk and can take{" "}
-                <strong>30 seconds to a few minutes</strong>. If your terminal shows{" "}
-                <code>FOOTBALL_RANKINGS_SKIP_PRELOAD=1</code>, that preload was skipped and this step will be slower.
-                <br />
-                Sanity check (opens new tab):{" "}
-                {route.page === "club" && route.teamId ? (
-                  <a
-                    href={apiUrl(`/api/teams/${route.teamId}/identity`)}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    /api/teams/{route.teamId}/identity
-                  </a>
-                ) : null}{" "}
-                ·{" "}
-                <a href={apiUrl("/api/health")} target="_blank" rel="noreferrer">
-                  /api/health
-                </a>
+                This may take a little longer on first visit while match history is prepared.
               </p>
             </div>
           ) : clubError ? (
@@ -1913,7 +1865,7 @@ function App() {
                   navigate("/");
                 }}
               >
-                Back home
+                Back Home
               </a>
             </div>
           ) : clubDetail ? (
@@ -1926,7 +1878,7 @@ function App() {
 
               {clubNarrative && clubNarrative.paragraphs?.length ? (
                 <div className="card">
-                  <h2>Club narrative</h2>
+                  <h2>Club Narrative</h2>
                   {clubNarrative.paragraphs.map((para, i) => (
                     <NarrativeParagraph key={`club-nar-${i}`} text={para} />
                   ))}
@@ -1934,13 +1886,13 @@ function App() {
               ) : null}
 
               <div className="card">
-                <h2>Rating over time</h2>
+                <h2>Rating Over Time</h2>
                 <Plot data={teamTrendData} layout={teamPlotLayout} />
               </div>
 
               <div className="club-extremes-grid">
                 <div className="card">
-                  <h2>Largest rating gains</h2>
+                  <h2>Largest Rating Gains</h2>
                   <p className="small" style={{ marginTop: "-8px" }}>
                     Fixtures with the biggest positive rating change for this club (post-match rating shown).
                   </p>
@@ -1952,7 +1904,7 @@ function App() {
                           <th>Opposition</th>
                           <th>Comp</th>
                           <th>Rating</th>
-                          <th>Δ rating</th>
+                          <th>Δ Rating</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1973,7 +1925,7 @@ function App() {
                 </div>
 
                 <div className="card">
-                  <h2>Largest rating losses</h2>
+                  <h2>Largest Rating Losses</h2>
                   <p className="small" style={{ marginTop: "-8px" }}>
                     Fixtures with the most negative rating change (post-match rating shown).
                   </p>
@@ -1985,7 +1937,7 @@ function App() {
                           <th>Opposition</th>
                           <th>Comp</th>
                           <th>Rating</th>
-                          <th>Δ rating</th>
+                          <th>Δ Rating</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -2007,7 +1959,7 @@ function App() {
               </div>
 
               <div className="card">
-                <h2>All results ({clubDetail.matches.length})</h2>
+                <h2>All Results ({clubDetail.matches.length})</h2>
                 <p className="small" style={{ marginTop: "-8px" }}>
                   Every match in the dataset involving this club (newest first). Δ rating is this
                   club&apos;s change from that fixture.
@@ -2021,8 +1973,8 @@ function App() {
                         <th>Scoreline</th>
                         <th>Opponent</th>
                         <th>Comp</th>
-                        <th>Δ rating</th>
-                        <th>Pre → post</th>
+                        <th>Δ Rating</th>
+                        <th>Pre → Post</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2067,12 +2019,12 @@ function App() {
                 navigate("/");
               }}
             >
-              ← Map & rankings
+              ← Map & Rankings
             </a>
           </nav>
 
           {loading || countries.length === 0 ? (
-            <div className="card card-muted loading-pulse">Loading country…</div>
+            <div className="card card-muted loading-pulse">Loading country profile…</div>
           ) : !countrySlugKnown ? (
             <div className="card error">
               Unknown country “{formatCountryDisplay(route.country)}”.{" "}
@@ -2084,7 +2036,7 @@ function App() {
                   navigate("/");
                 }}
               >
-                Back home
+                Back Home
               </a>
             </div>
           ) : (
@@ -2112,7 +2064,7 @@ function App() {
 
               {countryNarrative && countryNarrative.paragraphs?.length ? (
                 <div className="card">
-                  <h2>Country narrative</h2>
+                  <h2>Country Narrative</h2>
                   {countryNarrative.paragraphs.map((para, i) => (
                     <NarrativeParagraph key={`nar-${i}`} text={para} />
                   ))}
@@ -2124,7 +2076,7 @@ function App() {
                   <label>Team</label>
                   <select value={selectedTeamId} onChange={(e) => setSelectedTeamId(e.target.value)}>
                     {filteredTeams.length === 0 ? (
-                      <option value="">No clubs match visibility rules for this country</option>
+                      <option value="">No clubs listed for this country right now</option>
                     ) : (
                       filteredTeams.map((team) => (
                         <option key={team.pid} value={team.pid}>
@@ -2144,21 +2096,21 @@ function App() {
                         navigate(`/club/${selectedTeamId}`);
                       }}
                     >
-                      Open club page → full results & weekly extremes
+                      Open Club Page — Full Results & Weekly Extremes
                     </a>
                   </div>
                 ) : null}
               </div>
 
               <div className="card">
-                <h2>Current top 5 — history over time</h2>
+                <h2>Current Top 5 — History Over Time</h2>
                 <p className="small" style={{ marginTop: "-8px" }}>
                   The five highest-rated clubs in this country in the latest rating week; each line follows that
                   club across all rating weeks in the dataset.
                 </p>
                 {countryTopFivePlotData.length === 0 ? (
                   <p className="small" style={{ marginBottom: 0 }}>
-                    No weekly series loaded yet — wait for data or pick another country.
+                    Chart data isn&apos;t available for this view yet. Try again shortly or choose another country.
                   </p>
                 ) : (
                   <Plot data={countryTopFivePlotData} layout={countryTopFivePlotLayout} />
@@ -2170,8 +2122,8 @@ function App() {
       ) : (
         <>
           <header className="page-hero">
-            <p className="sub-head">Ratings · European clubs</p>
-            <h1>Ratings dashboard</h1>
+            <p className="sub-head">Ratings · European Clubs</p>
+            <h1>Ratings Dashboard</h1>
             <p className="dashboard-card-subtle-lead">
               Weekly Glicko strength across European leagues. Explore countries on the map; open the{" "}
               <a
@@ -2225,7 +2177,7 @@ function App() {
 
           <section className="map-full-width" aria-label="European ratings map">
             <div className="dashboard-card dashboard-map-surround">
-              <h2 className="dashboard-card-title">European club strength by country</h2>
+              <h2 className="dashboard-card-title">European Club Strength by Country</h2>
               <p className="dashboard-card-subtitle">
                 Each country is shaded by its highest-rated club. Click a country to explore its clubs.
               </p>
@@ -2334,7 +2286,7 @@ function App() {
                         </strong>
                       </p>
                       <div className="dashboard-insight-topclubs">
-                        <p className="dashboard-insight-section-label">Top clubs</p>
+                        <p className="dashboard-insight-section-label">Top Clubs</p>
                         <ol className="dashboard-insight-ol">
                           {(mapInsightCountryClubs.length
                             ? mapInsightCountryClubs
@@ -2368,14 +2320,14 @@ function App() {
                             navigate(`/country/${encodeURIComponent(mapSelectedCountrySlug)}`);
                           }}
                         >
-                          Open full country page →
+                          Open Full Country Page
                         </a>
                         <button
                           type="button"
                           className="link-btn dashboard-insight-clear"
                           onClick={() => setMapSelectedCountrySlug(null)}
                         >
-                          ← Europe overview
+                          Europe Overview
                         </button>
                       </div>
                     </>
@@ -2387,12 +2339,12 @@ function App() {
 
           {loading && (
             <div className="card card-muted loading-pulse" aria-busy="true">
-              Loading data…
+              <p style={{ margin: 0 }}>Loading ratings…</p>
             </div>
           )}
 
           <div className="card">
-            <h2>Current top 25</h2>
+            <h2>Current Top 25</h2>
             <p className="small" style={{ marginTop: "-8px", marginBottom: "14px" }}>
               Latest rating week by <strong>Glicko rating</strong>. Only clubs with more than five matches in each of 2024,
               2025, and 2026 appear here and on the map (see About). Rows are clickable — open a club&apos;s full history.
@@ -2401,8 +2353,8 @@ function App() {
             <div className="table-scroll">
             {!loading && sortedTopSnapshot.length === 0 ? (
               <p className="small" style={{ marginBottom: "12px" }}>
-                No clubs in the current top snapshot (empty response or visibility filters excluded everyone). Confirm
-                Supabase import and that GET /api/health reports postgres_reachable=yes when using DATABASE_URL.
+                No clubs are listed right now — the table may still be updating, or filters may hide some sides.
+                Please try again in a moment.
               </p>
             ) : null}
             <table>
