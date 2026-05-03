@@ -525,15 +525,15 @@ function DiffusedPage({ navigate }) {
   );
 }
 
-/** Renders narrative strings that use **markers** as bold (template-controlled; not raw HTML). */
+/** Public-facing explainers for ratings and the dashboard (legacy bundle). */
 function InfoPage({ navigate }) {
   return (
     <>
       <header className="page-hero">
-        <h1>Method</h1>
+        <h1>How the ratings work</h1>
         <p className="small">
-          Short overview of how club <strong>ratings</strong> are produced and what you are seeing on the map and
-          club pages.
+          What the numbers mean, how they&apos;re produced, and how to read this site — without diving into
+          implementation detail.
         </p>
       </header>
 
@@ -541,22 +541,47 @@ function InfoPage({ navigate }) {
         <h2>Rating system</h2>
         <p className="small" style={{ marginBottom: "12px" }}>
           Each club has a <strong>rating</strong> (strength estimate) and uncertainty that update after matches.
-          The pipeline uses the <strong>Glicko-2</strong> algorithm — an extension of Elo meant for paired contests
-          with sparse play — adapted here to football results grouped into <strong>rating weeks</strong> (not always
-          one update per match day).
+          The model uses <strong>Glicko-2</strong>, an extension of Elo suited to intermittent play: results are
+          rolled into <strong>rating weeks</strong>, so updates may bundle several fixtures rather than firing after
+          every single match day.
         </p>
         <p className="small" style={{ marginBottom: 0 }}>
-          Higher <strong>rating</strong> ⇒ stronger expected performance vs typical opponents; margins and surprise
-          results move ratings more than predictable wins.
+          A higher <strong>rating</strong> means stronger expected results against typical opponents; big surprises and
+          tight margins move ratings more than routine wins.
         </p>
       </div>
 
       <div className="card">
-        <h2>Comparability strength (simple layer)</h2>
+        <h2>Glicko-2 — core ideas</h2>
+        <p className="small" style={{ marginBottom: "12px" }}>
+          Each club has a mean strength <strong>μ</strong>, an uncertainty band around it (<strong>φ</strong>,
+          sometimes called rating deviation), and a volatility term <strong>σ</strong>. Each week, wins, draws, and
+          losses feed an update step. The formulas below are the standard compact sketch; full theory is in Mark
+          Glickman&apos;s Glicko-2 paper.
+        </p>
+        <p className="small" style={{ marginBottom: "8px" }}>
+          <strong>Opponent uncertainty</strong> enters match expectations through:
+        </p>
+        <div className="info-equation" aria-label="RD damping formula">
+          <span className="info-equation-label">Opponent scaling factor</span>
+          {`g(φ_j) = √( 1 + 3φ_j² / π² )`}
+        </div>
+        <p className="small" style={{ marginBottom: "8px", marginTop: "14px" }}>
+          <strong>Expected score</strong> for side <em>i</em> versus <em>j</em> (same logistic shape as Elo, adjusted
+          for <em>j</em>&apos;s uncertainty):
+        </p>
+        <div className="info-equation" aria-label="Expected score formula">
+          <span className="info-equation-label">Match expectation</span>
+          {`E_ij = 1 / ( 1 + 10^( -( g(φ_j)(μ_i - μ_j) ) / 400 ) )`}
+        </div>
+        <p className="small" style={{ marginBottom: "8px", marginTop: "14px" }}>
+          Actual outcomes are compared to <strong>E</strong>; surprise results and volatility shape how far{" "}
+          <strong>μ</strong>, <strong>φ</strong>, and <strong>σ</strong> move before the next week.
+        </p>
         <p className="small" style={{ marginBottom: 0 }}>
-          The pipeline can still compute <strong>simple adjusted strength</strong> after Glicko (cross-context schedule
-          exposure and optional SOS-style anchors). That curve is <strong>not</strong> what drives browsing here — it lives
-          mainly in exports and on the{" "}
+          On this site, <strong>maps, charts, rankings, and automated write-ups</strong> use that raw Glicko strength
+          (the rating, μ). For an optional lens that folds schedule context into one comparable curve — what we call{" "}
+          <strong>diffused</strong> strength — see the{" "}
           <a
             href="#/diffused"
             onClick={(e) => {
@@ -566,25 +591,44 @@ function InfoPage({ navigate }) {
           >
             Diffused
           </a>{" "}
-          page. Full <strong>GCAM</strong> diagnostics (connectivity, structural RD, trust) remain export-side for
-          analysis.
+          page.
         </p>
       </div>
 
       <div className="card">
-        <h2>Using the site</h2>
+        <h2>Schedule comparability (optional layer)</h2>
+        <p className="small" style={{ marginBottom: 0 }}>
+          Behind the scenes the project can also derive <strong>simple adjusted strength</strong> after Glicko —
+          blending cross-league schedule exposure and optional strength-of-schedule anchors.{" "}
+          <strong>That is not what you see</strong> on the main dashboard; it is mainly for downloads and research. For
+          the intuition, read{" "}
+          <a
+            href="#/diffused"
+            onClick={(e) => {
+              e.preventDefault();
+              navigate("/diffused");
+            }}
+          >
+            Diffused
+          </a>
+          . Richer connectivity-style diagnostics stay in exports for analysts who want them.
+        </p>
+      </div>
+
+      <div className="card">
+        <h2>Using this site</h2>
         <ul className="small info-list">
           <li>
-            <strong>Map & top 25</strong> — hover countries, click for national snapshot and top-five rating
-            tracks; open any club for full fixtures and weekly extremes.
+            <strong>Dashboard</strong> — explore Europe on the map, compare countries, open clubs for fixtures and
+            rating history, and browse the current top table.
           </li>
           <li>
-            <strong>Diffused</strong> — plain-language overview of schedule-diffusion / simple-adjusted ideas (not the
-            default strength shown on the dashboard).
+            <strong>Diffused</strong> — separate explainer on schedule-diffusion / comparability (not the default
+            strength curve here).
           </li>
           <li>
-            <strong>Ratings</strong> in tables and charts use raw Glicko μ for clubs in the same European run; they are
-            descriptive, not betting advice.
+            <strong>Ratings</strong> describe historical strength in one continuous European run; they are not betting
+            tips or guarantees about future results.
           </li>
           <li>
             <strong>
@@ -598,12 +642,45 @@ function InfoPage({ navigate }) {
                 Calibration
               </a>
             </strong>{" "}
-            — empirical fit of predictions vs results (run{" "}
-            <code>scripts/analyse_europe_calibration.py</code> after Glicko; optional{" "}
-            <code>--last-weeks N</code> for the last N distinct rating weeks only).
+            — checks how well model forecasts line up with actual scores and outcomes across pre-match rating gaps.
           </li>
         </ul>
-        <p style={{ marginBottom: 0, marginTop: "12px" }}>
+      </div>
+
+      <div className="card">
+        <h2>Automated country &amp; club notes</h2>
+        <p className="small" style={{ marginBottom: "12px" }}>
+          The short prose blocks on country and club pages are <strong>generated from the same rating history</strong>{" "}
+          as the charts — they are not hand-edited match reports. Only clubs that meet the site&apos;s visibility
+          rules (enough recent seasons played) appear on the map and in those summaries.
+        </p>
+        <ul className="small info-list" style={{ marginBottom: "12px" }}>
+          <li>
+            <strong>Ladder-style statistics</strong> (for example domestic vs European rank bands over time) trim the
+            earliest stretch of weekly snapshots so early-season clustering near the starting rating does not swamp
+            long-run trends. Headline “latest week” figures still use the full history.
+          </li>
+          <li>
+            <strong>Era segments</strong> — where shown, time splits are an automatic summary of stronger vs weaker
+            stretches of form; treat them as coarse guides, not precise breakpoints.
+          </li>
+          <li>
+            <strong>Country highlights</strong> might include big week-to-week moves, peak ratings, averages across
+            time, or how often a club led its nation on the ladder — with sensible tie-breaking when clubs are close.
+          </li>
+        </ul>
+        <p className="small" style={{ marginBottom: 0 }}>
+          Highlighted phrases in the text use simple markup so emphasis stays readable and consistent.
+        </p>
+      </div>
+
+      <div className="card">
+        <h2>About</h2>
+        <p className="small" style={{ marginBottom: 0 }}>
+          Built by <strong>Douglas Baillie</strong>. Contact:{" "}
+          <a href="mailto:douglasbaillie@live.co.uk">douglasbaillie@live.co.uk</a>
+        </p>
+        <p style={{ marginBottom: 0, marginTop: "16px" }}>
           <a
             className="link-btn link-btn--primary"
             href="#/"
@@ -612,55 +689,8 @@ function InfoPage({ navigate }) {
               navigate("/");
             }}
           >
-            ← Back to map & top 25
+            ← Back to dashboard
           </a>
-        </p>
-      </div>
-
-      <div className="card">
-        <h2>Country & club narratives</h2>
-        <p className="small" style={{ marginBottom: "12px" }}>
-          The prose blocks on country and club pages are <strong>generated automatically</strong> from the weekly
-          rating CSVs (not hand-written). Highlights use the same visibility rules as the map and lists (recent
-          activity per calendar year).
-        </p>
-        <ul className="small info-list" style={{ marginBottom: "12px" }}>
-          <li>
-            <strong>Templates</strong> — copy is rendered with{" "}
-            <a href="https://jinja.palletsprojects.com/" target="_blank" rel="noreferrer">
-              Jinja2
-            </a>
-            ; dates in narrative wording use{" "}
-            <a href="https://pendulum.eustace.io/" target="_blank" rel="noreferrer">
-              Pendulum
-            </a>
-            .
-          </li>
-          <li>
-            <strong>Warm-up weeks</strong> — some ladder-style summaries (continental counts, domestic/European rank
-            shares on club pages) ignore the first N chronological rating weeks so early mass ties near the default
-            rating do not dominate rankings. The setting is{" "}
-            <code>FOOTBALL_NARRATIVE_LADDER_DROP_FIRST_N_WEEKS</code> (default 52). Latest-week ranks on club pages
-            still use the full series.
-          </li>
-          <li>
-            <strong>Change-point segments</strong> — optional splits on average rating through time use{" "}
-            <code>ruptures</code> (PELT, <code>l2</code> model) when that library is installed; otherwise a greedy
-            split that minimizes within-segment squared error. Both are coarse summaries only.
-          </li>
-          <li>
-            <strong>Country club highlights</strong> — examples: largest step from the previous rating week to the
-            latest, highest peak rating, highest mean rating across weeks, and most weeks spent as the country&apos;s
-            top-rated club that week. Tie-breaking uses rating then club name order where needed.
-          </li>
-          <li>
-            <strong>Bold phrases</strong> in narratives are delimiter-based (<code>**like this**</code>), not raw
-            HTML.
-          </li>
-        </ul>
-        <p className="small" style={{ marginBottom: 0 }}>
-          Each narrative API response also includes a <code>facts</code> object (counts, segment lengths, backend
-          labels) for debugging or future UI — not shown on the page today.
         </p>
       </div>
 
@@ -1161,7 +1191,7 @@ function CalibrationPage({ navigate, data, loading, error }) {
                   navigate("/info");
                 }}
               >
-                Method & narrative tooling → Info
+                How ratings work → Info
               </a>
             </p>
           </div>

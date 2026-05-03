@@ -48,15 +48,28 @@ const UEFA_CODES = new Set(["UCL", "UEL", "UECL", "EURO"]);
 /** Lines for country “current top 5 over time” chart (distinct from map heat ramp). */
 const COUNTRY_TOP5_LINE_COLORS = ["#60A5FA", "#D6A84F", "#A78BFA", "#2DD4BF", "#FB923C"];
 
-/** Choropleth / markers: weak → strong (all blue — no green in the heat ramp) */
-const MAP_HEAT_COLORSCALE = [
-  [0, "#1e293b"],
-  [0.2, "#1e3a5f"],
-  [0.45, "#2563eb"],
-  [0.68, "#3b82f6"],
-  [0.88, "#60a5fa"],
-  [1, "#93c5fd"],
+/** Choropleth / markers: premium dark-theme ramp (weak → elite). */
+const MAP_PREMIUM_COLORSCALE = [
+  [0, "#243044"],
+  [0.35, "#2f5fa8"],
+  [0.7, "#3b82f6"],
+  [1, "#8ec5ff"],
 ];
+
+const MAP_GEO_LINE = "#334155";
+
+/** Plotly config for embedded charts (mode bar off; map shouldn’t capture scroll zoom). */
+const PLOT_BASE_CONFIG = {
+  displayModeBar: false,
+  scrollZoom: false,
+};
+
+function medianNumeric(values) {
+  const v = values.filter((x) => Number.isFinite(x)).sort((a, b) => a - b);
+  if (v.length === 0) return null;
+  const mid = Math.floor(v.length / 2);
+  return v.length % 2 ? v[mid] : (v[mid - 1] + v[mid]) / 2;
+}
 
 /** Glicko μ for snapshot table sorting and display. */
 function snapshotRawValue(row) {
@@ -176,8 +189,10 @@ function Plot({ data, layout, config, onClick, onHover, className, mapChart = fa
   useEffect(() => {
     if (!ref.current) return;
     Plotly.newPlot(ref.current, data, layout, {
-      responsive: !(layout && layout.width != null && layout.height != null),
       displaylogo: false,
+      responsive: !(layout && layout.width != null && layout.height != null),
+      ...PLOT_BASE_CONFIG,
+      ...(mapChart ? { doubleClick: false } : {}),
       ...config,
     });
     if (onClick) {
@@ -190,7 +205,7 @@ function Plot({ data, layout, config, onClick, onHover, className, mapChart = fa
       const node = ref.current;
       if (node) Plotly.purge(node);
     };
-  }, [data, layout, config, onClick, onHover]);
+  }, [data, layout, config, onClick, onHover, mapChart]);
 
   const fillMap = mapChart || className === "map-plot-host";
 
@@ -335,71 +350,63 @@ function useHashRoute() {
   return { route, navigate, hash };
 }
 
-/** Info / Method page (static copy + About). */
+/** Public-facing explainers for ratings and the dashboard. */
 function InfoPage({ navigate }) {
   return (
     <>
       <header className="page-hero">
-        <h1>Method</h1>
+        <h1>How the ratings work</h1>
         <p className="small">
-          Short overview of how club <strong>ratings</strong> are produced and what you are seeing on the map and
-          club pages.
+          What the numbers mean, how they&apos;re produced, and how to read this site — without diving into
+          implementation detail.
         </p>
       </header>
-
-      <div className="card">
-        <h2>About</h2>
-        <p className="small" style={{ marginBottom: 0 }}>
-          Built by <strong>Douglas Baillie</strong>. Contact:{" "}
-          <a href="mailto:douglasbaillie@live.co.uk">douglasbaillie@live.co.uk</a>
-        </p>
-      </div>
 
       <div className="card">
         <h2>Rating system</h2>
         <p className="small" style={{ marginBottom: "12px" }}>
           Each club has a <strong>rating</strong> (strength estimate) and uncertainty that update after matches.
-          The pipeline uses the <strong>Glicko-2</strong> algorithm — an extension of Elo meant for paired contests
-          with sparse play — adapted here to football results grouped into <strong>rating weeks</strong> (not always
-          one update per match day).
+          The model uses <strong>Glicko-2</strong>, an extension of Elo suited to intermittent play: results are
+          rolled into <strong>rating weeks</strong>, so updates may bundle several fixtures rather than firing after
+          every single match day.
         </p>
         <p className="small" style={{ marginBottom: 0 }}>
-          Higher <strong>rating</strong> ⇒ stronger expected performance vs typical opponents; margins and surprise
-          results move ratings more than predictable wins.
+          A higher <strong>rating</strong> means stronger expected results against typical opponents; big surprises and
+          tight margins move ratings more than routine wins.
         </p>
       </div>
 
       <div className="card">
-        <h2>Glicko-2 — core equations (sketch)</h2>
+        <h2>Glicko-2 — core ideas</h2>
         <p className="small" style={{ marginBottom: "12px" }}>
-          Each club carries a mean rating <strong>μ</strong>, a rating deviation <strong>φ</strong> (uncertainty), and a
-          volatility <strong>σ</strong>. Updates happen each <strong>rating week</strong> from observed scores (win /
-          draw / loss mapped to 1 / ½ / 0). The algebra below is the usual compact form; full derivations are in
-          Mark Glickman&apos;s Glicko-2 note.
+          Each club has a mean strength <strong>μ</strong>, an uncertainty band around it (<strong>φ</strong>,
+          sometimes called rating deviation), and a volatility term <strong>σ</strong>. Each week, wins, draws, and
+          losses feed an update step. The formulas below are the standard compact sketch; full theory is in Mark
+          Glickman&apos;s Glicko-2 paper.
         </p>
         <p className="small" style={{ marginBottom: "8px" }}>
-          <strong>RD damping</strong> — high opponent uncertainty enters expectations through:
+          <strong>Opponent uncertainty</strong> enters match expectations through:
         </p>
         <div className="info-equation" aria-label="RD damping formula">
           <span className="info-equation-label">Opponent scaling factor</span>
           {`g(φ_j) = √( 1 + 3φ_j² / π² )`}
         </div>
         <p className="small" style={{ marginBottom: "8px", marginTop: "14px" }}>
-          <strong>Expected score</strong> for side <em>i</em> vs <em>j</em> (same logistic backbone as Elo, with an
-          effective gap weighted by <em>j</em>&apos;s uncertainty):
+          <strong>Expected score</strong> for side <em>i</em> versus <em>j</em> (same logistic shape as Elo, adjusted
+          for <em>j</em>&apos;s uncertainty):
         </p>
         <div className="info-equation" aria-label="Expected score formula">
           <span className="info-equation-label">Match expectation</span>
           {`E_ij = 1 / ( 1 + 10^( -( g(φ_j)(μ_i - μ_j) ) / 400 ) )`}
         </div>
         <p className="small" style={{ marginBottom: "8px", marginTop: "14px" }}>
-          Outcomes are compared to <strong>E</strong>; surprise results and volatility <strong>σ</strong> control how
-          aggressively <strong>μ</strong>, <strong>φ</strong>, and <strong>σ</strong> move before the next week.
+          Actual outcomes are compared to <strong>E</strong>; surprise results and volatility shape how far{" "}
+          <strong>μ</strong>, <strong>φ</strong>, and <strong>σ</strong> move before the next week.
         </p>
         <p className="small" style={{ marginBottom: 0 }}>
-          On this site, <strong>maps, charts, rankings, and narratives</strong> use that raw Glicko{" "}
-          <strong>rating</strong> (μ). For an optional post-Glicko lens that blends schedule exposure into a single
-          comparable curve — what we call <strong>diffused</strong> strength — see the{" "}
+          On this site, <strong>maps, charts, rankings, and automated write-ups</strong> use that raw Glicko strength
+          (the rating, μ). For an optional lens that folds schedule context into one comparable curve — what we call{" "}
+          <strong>diffused</strong> strength — see the{" "}
           <a
             href="#/diffused"
             onClick={(e) => {
@@ -409,16 +416,17 @@ function InfoPage({ navigate }) {
           >
             Diffused
           </a>{" "}
-          tab.
+          page.
         </p>
       </div>
 
       <div className="card">
-        <h2>Comparability strength (simple layer)</h2>
+        <h2>Schedule comparability (optional layer)</h2>
         <p className="small" style={{ marginBottom: 0 }}>
-          The pipeline can still compute <strong>simple adjusted strength</strong> after Glicko (cross-context schedule
-          exposure and optional SOS-style anchors). That curve is <strong>not</strong> what drives browsing here — it
-          lives mainly in exports and in the conceptual write-up on the{" "}
+          Behind the scenes the project can also derive <strong>simple adjusted strength</strong> after Glicko —
+          blending cross-league schedule exposure and optional strength-of-schedule anchors.{" "}
+          <strong>That is not what you see</strong> on the main dashboard; it is mainly for downloads and research. For
+          the intuition, read{" "}
           <a
             href="#/diffused"
             onClick={(e) => {
@@ -427,26 +435,25 @@ function InfoPage({ navigate }) {
             }}
           >
             Diffused
-          </a>{" "}
-          page. Full <strong>GCAM</strong> diagnostics (connectivity, structural RD, trust) remain export-side for
-          analysis.
+          </a>
+          . Richer connectivity-style diagnostics stay in exports for analysts who want them.
         </p>
       </div>
 
       <div className="card">
-        <h2>Using the site</h2>
+        <h2>Using this site</h2>
         <ul className="small info-list">
           <li>
-            <strong>Map & top 25</strong> — hover countries, click for national snapshot and top-five rating
-            tracks; open any club for full fixtures and weekly extremes.
+            <strong>Dashboard</strong> — explore Europe on the map, compare countries, open clubs for fixtures and
+            rating history, and browse the current top table.
           </li>
           <li>
-            <strong>Diffused</strong> — plain-language overview of schedule-diffusion / simple-adjusted ideas (not the
-            default strength shown on the dashboard).
+            <strong>Diffused</strong> — separate explainer on schedule-diffusion / comparability (not the default
+            strength curve here).
           </li>
           <li>
-            <strong>Ratings</strong> in tables and charts use raw Glicko μ for clubs in the same European run; they are
-            descriptive, not betting advice.
+            <strong>Ratings</strong> describe historical strength in one continuous European run; they are not betting
+            tips or guarantees about future results.
           </li>
           <li>
             <strong>
@@ -460,12 +467,45 @@ function InfoPage({ navigate }) {
                 Calibration
               </a>
             </strong>{" "}
-            — empirical fit of predictions vs results (run{" "}
-            <code>scripts/analyse_europe_calibration.py</code> after Glicko; optional{" "}
-            <code>--last-weeks N</code> for the last N distinct rating weeks only).
+            — checks how well model forecasts line up with actual scores and outcomes across pre-match rating gaps.
           </li>
         </ul>
-        <p style={{ marginBottom: 0, marginTop: "12px" }}>
+      </div>
+
+      <div className="card">
+        <h2>Automated country &amp; club notes</h2>
+        <p className="small" style={{ marginBottom: "12px" }}>
+          The short prose blocks on country and club pages are <strong>generated from the same rating history</strong>{" "}
+          as the charts — they are not hand-edited match reports. Only clubs that meet the site&apos;s visibility
+          rules (enough recent seasons played) appear on the map and in those summaries.
+        </p>
+        <ul className="small info-list" style={{ marginBottom: "12px" }}>
+          <li>
+            <strong>Ladder-style statistics</strong> (for example domestic vs European rank bands over time) trim the
+            earliest stretch of weekly snapshots so early-season clustering near the starting rating does not swamp
+            long-run trends. Headline “latest week” figures still use the full history.
+          </li>
+          <li>
+            <strong>Era segments</strong> — where shown, time splits are an automatic summary of stronger vs weaker
+            stretches of form; treat them as coarse guides, not precise breakpoints.
+          </li>
+          <li>
+            <strong>Country highlights</strong> might include big week-to-week moves, peak ratings, averages across
+            time, or how often a club led its nation on the ladder — with sensible tie-breaking when clubs are close.
+          </li>
+        </ul>
+        <p className="small" style={{ marginBottom: 0 }}>
+          Highlighted phrases in the text use simple markup so emphasis stays readable and consistent.
+        </p>
+      </div>
+
+      <div className="card">
+        <h2>About</h2>
+        <p className="small" style={{ marginBottom: 0 }}>
+          Built by <strong>Douglas Baillie</strong>. Contact:{" "}
+          <a href="mailto:douglasbaillie@live.co.uk">douglasbaillie@live.co.uk</a>
+        </p>
+        <p style={{ marginBottom: 0, marginTop: "16px" }}>
           <a
             className="link-btn link-btn--primary"
             href="#/"
@@ -474,55 +514,8 @@ function InfoPage({ navigate }) {
               navigate("/");
             }}
           >
-            ← Back to map & top 25
+            ← Back to dashboard
           </a>
-        </p>
-      </div>
-
-      <div className="card">
-        <h2>Country & club narratives</h2>
-        <p className="small" style={{ marginBottom: "12px" }}>
-          The prose blocks on country and club pages are <strong>generated automatically</strong> from the weekly
-          rating CSVs (not hand-written). Highlights use the same visibility rules as the map and lists (recent
-          activity per calendar year).
-        </p>
-        <ul className="small info-list" style={{ marginBottom: "12px" }}>
-          <li>
-            <strong>Templates</strong> — copy is rendered with{" "}
-            <a href="https://jinja.palletsprojects.com/" target="_blank" rel="noreferrer">
-              Jinja2
-            </a>
-            ; dates in narrative wording use{" "}
-            <a href="https://pendulum.eustace.io/" target="_blank" rel="noreferrer">
-              Pendulum
-            </a>
-            .
-          </li>
-          <li>
-            <strong>Warm-up weeks</strong> — some ladder-style summaries (continental counts, domestic/European rank
-            shares on club pages) ignore the first N chronological rating weeks so early mass ties near the default
-            rating do not dominate rankings. The setting is{" "}
-            <code>FOOTBALL_NARRATIVE_LADDER_DROP_FIRST_N_WEEKS</code> (default 52). Latest-week ranks on club pages
-            still use the full series.
-          </li>
-          <li>
-            <strong>Change-point segments</strong> — optional splits on average rating through time use{" "}
-            <code>ruptures</code> (PELT, <code>l2</code> model) when that library is installed; otherwise a greedy
-            split that minimizes within-segment squared error. Both are coarse summaries only.
-          </li>
-          <li>
-            <strong>Country club highlights</strong> — examples: largest step from the previous rating week to the
-            latest, highest peak rating, highest mean rating across weeks, and most weeks spent as the country&apos;s
-            top-rated club that week. Tie-breaking uses rating then club name order where needed.
-          </li>
-          <li>
-            <strong>Bold phrases</strong> in narratives are delimiter-based (<code>**like this**</code>), not raw
-            HTML.
-          </li>
-        </ul>
-        <p className="small" style={{ marginBottom: 0 }}>
-          Each narrative API response also includes a <code>facts</code> object (counts, segment lengths, backend
-          labels) for debugging or future UI — not shown on the page today.
         </p>
       </div>
     </>
@@ -1095,7 +1088,7 @@ function CalibrationPage({ navigate, data, loading, error }) {
                   navigate("/info");
                 }}
               >
-                Method & narrative tooling → Info
+                How ratings work → Info
               </a>
             </p>
           </div>
@@ -1111,13 +1104,15 @@ function App() {
   const [countrySummaries, setCountrySummaries] = useState([]);
   const [selectedCountry, setSelectedCountry] = useState("");
   const [selectedTeamId, setSelectedTeamId] = useState("");
-  const [hoveredCountry, setHoveredCountry] = useState("");
+  /** Map dashboard: selected country slug for insight panel + highlight (does not navigate). */
+  const [mapSelectedCountrySlug, setMapSelectedCountrySlug] = useState(null);
 
   const [teamSeries, setTeamSeries] = useState([]);
   const [countryTopSeries, setCountryTopSeries] = useState(null);
   const [countryNarrative, setCountryNarrative] = useState(null);
   const [biggestMatches, setBiggestMatches] = useState({ upsets: [], swings: [] });
-  const [topSnapshot, setTopSnapshot] = useState([]);
+  /** Latest-week ratings (up to 500 rows) for map-side insights + top-25 table. */
+  const [latestRatingsRows, setLatestRatingsRows] = useState([]);
   /** Client reorder of top snapshot by Glicko rating only (server default is newest-week desc). */
   const [snapshotRatingSortDir, setSnapshotRatingSortDir] = useState("desc");
 
@@ -1139,8 +1134,8 @@ function App() {
   const [mapDims, setMapDims] = useState(() => {
     if (typeof window === "undefined") return { w: 1200, h: 560 };
     const w = Math.min(Math.floor(window.innerWidth * 0.94), 1680);
-    const aspect = 2.15;
-    const h = Math.round(Math.min(Math.max(w / aspect, 340), 760));
+    const aspect = 1.55;
+    const h = Math.round(Math.min(Math.max(w / aspect, 520), 780));
     return { w, h };
   });
 
@@ -1202,12 +1197,12 @@ function App() {
         const [countriesData, teamsData, snapshot, summariesData] = await Promise.all([
           getJson("/api/countries"),
           getJson("/api/teams"),
-          getJson("/api/snapshot?top_n=25"),
+          getJson("/api/snapshot?top_n=500"),
           getJson("/api/country-summaries", { allow404: true }),
         ]);
         setCountries(Array.isArray(countriesData) ? countriesData : []);
         setTeams(Array.isArray(teamsData) ? teamsData : []);
-        setTopSnapshot(Array.isArray(snapshot) ? snapshot : []);
+        setLatestRatingsRows(Array.isArray(snapshot) ? snapshot : []);
         setCountrySummaries(Array.isArray(summariesData) ? summariesData : []);
         const initial = typeof window !== "undefined" ? parseHashRoute() : { page: "home" };
         if (countriesData.length > 0) {
@@ -1379,6 +1374,8 @@ function App() {
     return teams.filter((team) => team.country_name.toLowerCase() === slug.toLowerCase());
   }, [teams, selectedCountry, route.page, route.country]);
 
+  const topSnapshot = useMemo(() => latestRatingsRows.slice(0, 25), [latestRatingsRows]);
+
   const sortedTopSnapshot = useMemo(() => {
     if (!topSnapshot.length) return [];
     const rows = topSnapshot.slice();
@@ -1398,6 +1395,59 @@ function App() {
     setSnapshotRatingSortDir((d) => (d === "desc" ? "asc" : "desc"));
   }, []);
 
+  useEffect(() => {
+    if (route.page !== "home") setMapSelectedCountrySlug(null);
+  }, [route.page]);
+
+  const europeCountryLadder = useMemo(() => {
+    const rows = (countrySummaries || [])
+      .map((s) => {
+        const slug = String(s.country_name || "").toLowerCase();
+        const rating = Number(s.top_team_rating);
+        return { ...s, slug, rating };
+      })
+      .filter((r) => Number.isFinite(r.rating))
+      .sort((a, b) => b.rating - a.rating || a.slug.localeCompare(b.slug));
+    const rankBySlug = new Map(rows.map((r, i) => [r.slug, i + 1]));
+    return { rows, rankBySlug };
+  }, [countrySummaries]);
+
+  const latestWeekId = useMemo(() => {
+    let w = null;
+    for (const s of countrySummaries) {
+      const v = Number(s.week);
+      if (Number.isFinite(v)) w = w == null ? v : Math.max(w, v);
+    }
+    return w;
+  }, [countrySummaries]);
+
+  const europeMedianBestClubRating = useMemo(
+    () => medianNumeric(europeCountryLadder.rows.map((r) => r.rating)),
+    [europeCountryLadder.rows],
+  );
+
+  const globalTopClubRow = useMemo(
+    () => (latestRatingsRows.length ? latestRatingsRows[0] : null),
+    [latestRatingsRows],
+  );
+
+  const mapInsightCountryClubs = useMemo(() => {
+    if (!mapSelectedCountrySlug || !latestRatingsRows.length) return [];
+    return latestRatingsRows
+      .filter((r) => String(r.country_name || "").toLowerCase() === mapSelectedCountrySlug)
+      .sort((a, b) => (snapshotRawValue(b) ?? 0) - (snapshotRawValue(a) ?? 0))
+      .slice(0, 5);
+  }, [mapSelectedCountrySlug, latestRatingsRows]);
+
+  const onMapPlotClick = useCallback((event) => {
+    const pt = event.points?.[0];
+    if (!pt || !Array.isArray(pt.customdata)) return;
+    const slug = String(pt.customdata[3] ?? "").toLowerCase();
+    if (!slug) return;
+    setMapSelectedCountrySlug(slug);
+    setSelectedCountry(slug);
+  }, []);
+
   const summaryByCountry = useMemo(() => {
     const map = new Map();
     countrySummaries.forEach((item) => map.set(item.country_name.toLowerCase(), item));
@@ -1408,8 +1458,8 @@ function App() {
     ? summaryByCountry.get(selectedCountry.toLowerCase())
     : null;
 
-  const hoveredCountrySummary = hoveredCountry
-    ? summaryByCountry.get(hoveredCountry.toLowerCase())
+  const mapInsightCountrySummary = mapSelectedCountrySlug
+    ? summaryByCountry.get(mapSelectedCountrySlug.toLowerCase())
     : null;
 
   const mapPoints = useMemo(() => {
@@ -1454,118 +1504,165 @@ function App() {
     return 12 + ((v - minHeat) / (maxHeat - minHeat)) * 16;
   });
 
-  const choroplethPoints = mapPoints.filter(
-    (p) => CHOROPLETH_LOCATION_BY_COUNTRY[String(p.country_name || "").toLowerCase()]
+  const choroplethPoints = useMemo(
+    () =>
+      mapPoints.filter((p) => CHOROPLETH_LOCATION_BY_COUNTRY[String(p.country_name || "").toLowerCase()]),
+    [mapPoints],
   );
 
-  const markerOnlyPoints = mapPoints.filter(
-    (p) => !CHOROPLETH_LOCATION_BY_COUNTRY[String(p.country_name || "").toLowerCase()]
+  const markerOnlyPoints = useMemo(
+    () =>
+      mapPoints.filter((p) => !CHOROPLETH_LOCATION_BY_COUNTRY[String(p.country_name || "").toLowerCase()]),
+    [mapPoints],
   );
 
-  const mapData = [
-    {
-      type: "choropleth",
-      locationmode: "country names",
-      locations: choroplethPoints.map(
-        (p) => CHOROPLETH_LOCATION_BY_COUNTRY[String(p.country_name || "").toLowerCase()]
-      ),
-      z: choroplethPoints.map(mapHeatValue),
-      customdata: choroplethPoints.map((p) => [
-        p.country_name,
-        p.average_rating,
-        p.active_teams,
-        p.top_team_name,
-        p.top_team_rating,
-      ]),
-      hovertemplate:
-        "<b>%{location}</b><br>" +
-        "Best team: %{customdata[3]} (%{customdata[4]:.1f})<br>" +
-        "Avg rating: %{customdata[1]:.1f}<br>" +
-        "Active teams: %{customdata[2]}<extra></extra>",
-      colorscale: MAP_HEAT_COLORSCALE,
-      zmin: minHeat,
-      zmax: maxHeat,
-      marker: { line: { color: "#334155", width: 0.8 } },
-      colorbar: {
-        orientation: "h",
-        x: 0.5,
-        xanchor: "center",
-        y: -0.02,
-        yanchor: "top",
-        len: 0.62,
-        thickness: 14,
-        title: {
-          text: "Best team Glicko rating",
-          font: { color: THEME.muted, size: 12 },
-          side: "bottom",
-        },
-        tickfont: { color: THEME.muted, size: 11 },
-        bgcolor: "rgba(17,24,39,0.92)",
-        bordercolor: "#334155",
-        borderwidth: 1,
-      },
-    },
-    {
-      type: "scattergeo",
-      mode: "markers+text",
-      showlegend: false,
-      lat: markerOnlyPoints.map((p) => p.lat),
-      lon: markerOnlyPoints.map((p) => p.lon),
-      text: markerOnlyPoints.map((p) => p.label),
-      textposition: "top center",
-      customdata: markerOnlyPoints.map((p) => [
-        p.country_name,
-        p.average_rating,
-        p.active_teams,
-        p.top_team_name,
-        p.top_team_rating,
-      ]),
-      hovertemplate:
-        "<b>%{text}</b><br>" +
-        "Best team: %{customdata[3]} (%{customdata[4]:.1f})<br>" +
-        "Avg rating: %{customdata[1]:.1f}<br>" +
-        "Active teams: %{customdata[2]}<extra></extra>",
-      marker: {
-        size: markerOnlyPoints.map((p) => {
-          const idx = mapPoints.findIndex((m) => m.country_name === p.country_name);
-          return idx >= 0 ? markerSizes[idx] : 14;
-        }),
-        color: markerOnlyPoints.map(mapHeatValue),
-        colorscale: MAP_HEAT_COLORSCALE,
-        cmin: minHeat,
-        cmax: maxHeat,
-        line: { color: "#475569", width: 1.2 },
-        opacity: 0.95,
+  const mapData = useMemo(() => {
+    const rankBySlug = europeCountryLadder.rankBySlug;
+    const chHoverCd = choroplethPoints.map((p) => {
+      const slug = String(p.country_name || "").toLowerCase();
+      const rk = rankBySlug.get(slug);
+      return [
+        formatCountryDisplay(p.country_name),
+        String(p.top_team_name ?? "—"),
+        rk ?? "—",
+        slug,
+        mapHeatValue(p),
+      ];
+    });
+    const scHoverCd = markerOnlyPoints.map((p) => {
+      const slug = String(p.country_name || "").toLowerCase();
+      const rk = rankBySlug.get(slug);
+      return [
+        formatCountryDisplay(p.country_name),
+        String(p.top_team_name ?? "—"),
+        rk ?? "—",
+        slug,
+        mapHeatValue(p),
+      ];
+    });
+    const traces = [
+      {
+        type: "choropleth",
+        locationmode: "country names",
+        locations: choroplethPoints.map(
+          (p) => CHOROPLETH_LOCATION_BY_COUNTRY[String(p.country_name || "").toLowerCase()],
+        ),
+        z: choroplethPoints.map(mapHeatValue),
+        customdata: chHoverCd,
+        hovertemplate:
+          "<b>%{customdata[0]}</b><br>Best club: %{customdata[1]}<br>Rating: %{z:.0f}<br>European rank: %{customdata[2]}<extra></extra>",
+        colorscale: MAP_PREMIUM_COLORSCALE,
+        zmin: minHeat,
+        zmax: maxHeat,
         showscale: false,
+        marker: { line: { color: MAP_GEO_LINE, width: 0.5 } },
       },
-    },
-  ];
+      {
+        type: "scattergeo",
+        mode: "markers",
+        showlegend: false,
+        lat: markerOnlyPoints.map((p) => p.lat),
+        lon: markerOnlyPoints.map((p) => p.lon),
+        customdata: scHoverCd,
+        hovertemplate:
+          "<b>%{customdata[0]}</b><br>Best club: %{customdata[1]}<br>Rating: %{customdata[4]:.0f}<br>European rank: %{customdata[2]}<extra></extra>",
+        marker: {
+          size: markerOnlyPoints.map((p) => {
+            const idx = mapPoints.findIndex((m) => m.country_name === p.country_name);
+            return idx >= 0 ? markerSizes[idx] : 14;
+          }),
+          color: markerOnlyPoints.map(mapHeatValue),
+          colorscale: MAP_PREMIUM_COLORSCALE,
+          cmin: minHeat,
+          cmax: maxHeat,
+          line: { color: MAP_GEO_LINE, width: 1 },
+          opacity: 0.92,
+          showscale: false,
+        },
+      },
+    ];
+    const hlSlug = mapSelectedCountrySlug;
+    const hlCoords = hlSlug ? COUNTRY_MAP_COORDS[hlSlug] : null;
+    const hlSummary = hlSlug ? summaryByCountry.get(hlSlug.toLowerCase()) : null;
+    if (hlCoords && hlSummary) {
+      const rk = rankBySlug.get(hlSlug) ?? "—";
+      traces.push({
+        type: "scattergeo",
+        mode: "markers",
+        showlegend: false,
+        lat: [hlCoords.lat],
+        lon: [hlCoords.lon],
+        customdata: [
+          [
+            formatCountryDisplay(hlSummary.country_name),
+            String(hlSummary.top_team_name ?? "—"),
+            rk,
+            hlSlug,
+            mapHeatValue(hlSummary),
+          ],
+        ],
+        hoverinfo: "skip",
+        marker: {
+          size: 26,
+          symbol: "circle-open",
+          line: { color: "#8ec5ff", width: 2.5 },
+          opacity: 1,
+        },
+      });
+    }
+    return traces;
+  }, [
+    choroplethPoints,
+    markerOnlyPoints,
+    minHeat,
+    maxHeat,
+    europeCountryLadder.rankBySlug,
+    mapPoints,
+    markerSizes,
+    mapSelectedCountrySlug,
+    summaryByCountry,
+  ]);
 
   const europeMapLayout = useMemo(
     () => ({
       autosize: false,
       width: mapDims.w,
       height: mapDims.h,
-      font: { color: THEME.text },
-      paper_bgcolor: THEME.plotPaper,
+      margin: { l: 0, r: 0, t: 0, b: 0 },
+      paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: "rgba(0,0,0,0)",
+      font: { color: THEME.text, size: 12 },
+      dragmode: false,
       geo: {
+        bgcolor: "rgba(0,0,0,0)",
         scope: "europe",
         projection: { type: "mercator" },
         showland: true,
-        landcolor: THEME.geoLand,
+        landcolor: "#1e293b",
         showcountries: true,
-        countrycolor: THEME.geoBorder,
+        countrycolor: MAP_GEO_LINE,
         showocean: true,
-        oceancolor: THEME.geoOcean,
-        /* Tighter N–S than default scope → geographic aspect reads wider inside the plot (less “square”). */
-        lataxis: { range: [37, 62] },
-        lonaxis: { range: [-24, 46] },
-        domain: { x: [0.02, 0.98], y: [0.02, 0.88] },
+        oceancolor: "#0b1220",
+        showcoastlines: false,
+        showframe: false,
+        lataxis: { range: [35, 72] },
+        lonaxis: { range: [-12, 35] },
+        domain: { x: [0, 1], y: [0, 1] },
       },
-      margin: { l: 4, r: 12, t: 12, b: 72 },
     }),
-    [mapDims.w, mapDims.h]
+    [mapDims.w, mapDims.h],
   );
+
+  const legendScaleTicks = useMemo(() => {
+    if (!Number.isFinite(minHeat) || !Number.isFinite(maxHeat) || maxHeat <= minHeat) {
+      return { lo: "—", midA: "—", midB: "—", hi: "—" };
+    }
+    const lo = Math.round(minHeat);
+    const hi = Math.round(maxHeat);
+    const q1 = Math.round(minHeat + (maxHeat - minHeat) * 0.33);
+    const q2 = Math.round(minHeat + (maxHeat - minHeat) * 0.67);
+    return { lo: String(lo), midA: String(q1), midB: String(q2), hi: `${hi}+` };
+  }, [minHeat, maxHeat]);
 
   const countryTopFivePlotLayout = {
     font: { color: THEME.text },
@@ -2072,9 +2169,8 @@ function App() {
           <header className="page-hero">
             <p className="sub-head">Ratings · European clubs</p>
             <h1>Ratings dashboard</h1>
-            <p className="small">
-              Hover countries for a snapshot; <strong>click</strong> to open detail. Rankings below use{" "}
-              <strong>Glicko rating</strong> for the latest rating week (see{" "}
+            <p className="dashboard-card-subtle-lead">
+              Weekly Glicko strength across European leagues. Explore countries on the map; open the{" "}
               <a
                 href="#/diffused"
                 onClick={(e) => {
@@ -2084,48 +2180,205 @@ function App() {
               >
                 Diffused
               </a>{" "}
-              for an optional comparability lens).
+              lens for schedule-comparability context.
             </p>
           </header>
 
-          <section className="map-full-width" aria-label="European ratings map">
-            <div className="card map-card">
-              <div className="map-card-intro">
-                <h2>European Ratings Map</h2>
-                <p className="small" style={{ marginTop: 0, paddingBottom: "12px" }}>
-                  Shading shows each nation&apos;s <strong>strongest</strong> club — deeper slate blues are weaker;
-                  brighter royal blues are stronger. Hover for a snapshot; <strong>click</strong> a country to open its
-                  page.
-                </p>
-              </div>
-              <div ref={mapHostRef} className="map-plot-host">
-                <Plot
-                  mapChart
-                  data={mapData}
-                  layout={europeMapLayout}
-                  onClick={(event) => {
-                    const point = event.points?.[0];
-                    if (!point || !point.customdata) return;
-                    const slug = String(point.customdata[0]).toLowerCase();
-                    setSelectedCountry(slug);
-                    navigate(`/country/${encodeURIComponent(slug)}`);
-                  }}
-                  onHover={(event) => {
-                    const point = event.points?.[0];
-                    if (!point || !point.customdata) return;
-                    setHoveredCountry(point.customdata[0]);
-                  }}
-                />
-              </div>
-              <p className="small map-card-status">
-                {hoveredCountrySummary
-                  ? (() => {
-                      const br = Number(hoveredCountrySummary.top_team_rating);
-                      const best = Number.isFinite(br) ? br.toFixed(1) : "—";
-                      return `${formatCountryDisplay(hoveredCountrySummary.country_name)}: best ${hoveredCountrySummary.top_team_name} (${best}), avg ${hoveredCountrySummary.average_rating.toFixed(1)}, ${hoveredCountrySummary.active_teams} teams — click map to open page.`;
-                    })()
-                  : "Hover any marker to preview that nation; click to open its summary."}
+          <section className="dashboard-kpi-row" aria-label="Summary KPIs">
+            <article className="dashboard-kpi-card">
+              <p className="dashboard-kpi-label">Latest week</p>
+              <p className="dashboard-kpi-value">
+                {latestWeekId != null ? `Week ${latestWeekId}` : loading ? "…" : "—"}
               </p>
+            </article>
+            <article className="dashboard-kpi-card">
+              <p className="dashboard-kpi-label">Top country</p>
+              <p className="dashboard-kpi-value">
+                {europeCountryLadder.rows[0]
+                  ? formatCountryDisplay(europeCountryLadder.rows[0].country_name)
+                  : loading
+                    ? "…"
+                    : "—"}
+              </p>
+            </article>
+            <article className="dashboard-kpi-card">
+              <p className="dashboard-kpi-label">Top club</p>
+              <p className="dashboard-kpi-value dashboard-kpi-value--twoline">
+                <span className="dashboard-kpi-primary">{globalTopClubRow?.team_name ?? (loading ? "…" : "—")}</span>
+                {globalTopClubRow ? (
+                  <span className="dashboard-kpi-secondary">
+                    {formatSnapshotStrengthCell(snapshotRawValue(globalTopClubRow))} rating
+                  </span>
+                ) : null}
+              </p>
+            </article>
+            <article className="dashboard-kpi-card">
+              <p className="dashboard-kpi-label">Countries rated</p>
+              <p className="dashboard-kpi-value">
+                {countrySummaries.length > 0 ? countrySummaries.length : loading ? "…" : "—"}
+              </p>
+            </article>
+          </section>
+
+          <section className="map-full-width" aria-label="European ratings map">
+            <div className="dashboard-card dashboard-map-surround">
+              <h2 className="dashboard-card-title">European club strength by country</h2>
+              <p className="dashboard-card-subtitle">
+                Each country is shaded by its highest-rated club. Click a country to explore its clubs.
+              </p>
+
+              <div className="dashboard-map-split">
+                <div className="dashboard-map-plot-col">
+                  <div ref={mapHostRef} className="dashboard-map-host">
+                    <Plot mapChart data={mapData} layout={europeMapLayout} onClick={onMapPlotClick} />
+                  </div>
+                  <div className="map-custom-legend" aria-label="Map colour scale">
+                    <span className="map-custom-legend-title">Best club rating</span>
+                    <div className="map-custom-legend-gradient" />
+                    <div className="map-custom-legend-labels">
+                      <span>Weak</span>
+                      <span>Average</span>
+                      <span>Strong</span>
+                      <span>Elite</span>
+                    </div>
+                    <div className="map-custom-legend-ticks">
+                      <span>{legendScaleTicks.lo}</span>
+                      <span>{legendScaleTicks.midA}</span>
+                      <span>{legendScaleTicks.midB}</span>
+                      <span>{legendScaleTicks.hi}</span>
+                    </div>
+                  </div>
+                  <p className="map-custom-legend-footnote">
+                    Unrated areas stay on the base map slate (no rating data).
+                  </p>
+                </div>
+
+                <aside className="dashboard-map-insight">
+                  {!mapSelectedCountrySlug ? (
+                    <>
+                      <h3 className="dashboard-insight-title">Europe snapshot</h3>
+                      <dl className="dashboard-insight-dl">
+                        <div>
+                          <dt>Latest week</dt>
+                          <dd>{latestWeekId != null ? `Week ${latestWeekId}` : "—"}</dd>
+                        </div>
+                        <div>
+                          <dt>Countries rated</dt>
+                          <dd>{countrySummaries.length || "—"}</dd>
+                        </div>
+                        <div>
+                          <dt>Highest rated club</dt>
+                          <dd>
+                            {europeCountryLadder.rows[0]?.top_team_name ? (
+                              <>
+                                <strong>{europeCountryLadder.rows[0].top_team_name}</strong>
+                                <span className="dashboard-insight-muted">
+                                  {" "}
+                                  ·{" "}
+                                  {Number(europeCountryLadder.rows[0].top_team_rating).toFixed(1)}
+                                </span>
+                              </>
+                            ) : (
+                              "—"
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Highest rating</dt>
+                          <dd>
+                            {europeCountryLadder.rows[0] && Number.isFinite(Number(europeCountryLadder.rows[0].top_team_rating))
+                              ? Number(europeCountryLadder.rows[0].top_team_rating).toFixed(1)
+                              : "—"}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Median best-club rating</dt>
+                          <dd>
+                            {europeMedianBestClubRating != null
+                              ? europeMedianBestClubRating.toFixed(1)
+                              : "—"}
+                          </dd>
+                        </div>
+                      </dl>
+                      <p className="dashboard-insight-hint">Click any shaded country to focus details.</p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="dashboard-insight-country-head">
+                        <h3 className="dashboard-insight-title">
+                          {formatCountryDisplay(mapSelectedCountrySlug)}
+                        </h3>
+                        {mapInsightCountrySummary ? (
+                          <p className="dashboard-insight-lead">
+                            Best club: <strong>{mapInsightCountrySummary.top_team_name}</strong>
+                            <span className="dashboard-insight-muted">
+                              {" "}
+                              · Rating{" "}
+                              {Number.isFinite(Number(mapInsightCountrySummary.top_team_rating))
+                                ? Number(mapInsightCountrySummary.top_team_rating).toFixed(1)
+                                : "—"}
+                            </span>
+                          </p>
+                        ) : (
+                          <p className="dashboard-insight-lead muted">No aggregate summary for this country.</p>
+                        )}
+                      </div>
+                      <p className="dashboard-insight-rank-line">
+                        European rank:{" "}
+                        <strong>
+                          {europeCountryLadder.rankBySlug.get(mapSelectedCountrySlug) ?? "—"} of{" "}
+                          {europeCountryLadder.rows.length || "—"}
+                        </strong>
+                      </p>
+                      <div className="dashboard-insight-topclubs">
+                        <p className="dashboard-insight-section-label">Top clubs</p>
+                        <ol className="dashboard-insight-ol">
+                          {(mapInsightCountryClubs.length
+                            ? mapInsightCountryClubs
+                            : mapInsightCountrySummary
+                              ? [
+                                  {
+                                    pid: "summary-fallback",
+                                    team_name: mapInsightCountrySummary.top_team_name,
+                                    rating: mapInsightCountrySummary.top_team_rating,
+                                  },
+                                ]
+                              : []
+                          ).map((row, idx) => (
+                            <li key={row.pid ?? `${idx}-${row.team_name}`}>
+                              <span className="dashboard-insight-li-name">{row.team_name}</span>
+                              <span className="dashboard-insight-li-rating">
+                                {snapshotRawValue(row) != null
+                                  ? snapshotRawValue(row).toFixed(1)
+                                  : Number(row.rating).toFixed(1)}
+                              </span>
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                      <div className="dashboard-insight-actions">
+                        <a
+                          className="link-btn link-btn--primary"
+                          href={`#/country/${encodeURIComponent(mapSelectedCountrySlug)}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            navigate(`/country/${encodeURIComponent(mapSelectedCountrySlug)}`);
+                          }}
+                        >
+                          Open full country page →
+                        </a>
+                        <button
+                          type="button"
+                          className="link-btn dashboard-insight-clear"
+                          onClick={() => setMapSelectedCountrySlug(null)}
+                        >
+                          ← Europe overview
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </aside>
+              </div>
             </div>
           </section>
 
