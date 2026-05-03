@@ -87,12 +87,12 @@ def _spa_index_file() -> Path | None:
 async def lifespan(app: FastAPI):
     paths = sorted({p for r in app.routes if (p := getattr(r, "path", None))})
     probe = [p for p in paths if "ping-club" in p or "clubdata" in p or p == "/api/health"]
-    print(f"[Football Rankings] loaded main.py from:\n  {Path(__file__).resolve()}", flush=True)
-    print(f"[Football Rankings] probe routes (should include /api/ping-club):\n  {probe}", flush=True)
+    print(f"[Football Ratings] loaded main.py from:\n  {Path(__file__).resolve()}", flush=True)
+    print(f"[Football Ratings] probe routes (should include /api/ping-club):\n  {probe}", flush=True)
 
     if os.environ.get("FOOTBALL_RANKINGS_SKIP_PRELOAD") == "1":
         print(
-            "Football Rankings API: FOOTBALL_RANKINGS_SKIP_PRELOAD=1 — startup preload skipped; "
+            "Football Ratings API: FOOTBALL_RANKINGS_SKIP_PRELOAD=1 — startup preload skipped; "
             "first heavy request may stall while large tables load.",
             flush=True,
         )
@@ -100,17 +100,17 @@ async def lifespan(app: FastAPI):
         return
     backend = "Postgres (DATABASE_URL)" if use_database() else "CSV files under europe_data_dir"
     print(
-        f"Football Rankings API: preloading data caches from {backend} (may take 1–2 min). "
+        f"Football Ratings API: preloading data caches from {backend} (may take 1–2 min). "
         "Browser requests will wait until this completes.",
         flush=True,
     )
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(None, warm_csv_caches)
-    print("Football Rankings API: data preload complete.", flush=True)
+    print("Football Ratings API: data preload complete.", flush=True)
     yield
 
 
-app = FastAPI(title="Football Rankings API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Football Ratings API", version="0.1.0", lifespan=lifespan)
 
 _origins = _cors_allow_origins()
 app.add_middleware(

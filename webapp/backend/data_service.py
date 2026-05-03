@@ -100,6 +100,16 @@ def strength_chart_column(weekly: pd.DataFrame) -> str:
     return ladder_sort_column(weekly)
 
 
+def diffused_weekly_column(weekly: pd.DataFrame) -> str | None:
+    """Optional schedule-comparability column for charts alongside raw Glicko μ (`rating`)."""
+    if weekly.empty:
+        return None
+    for col in ("simple_adjusted_rating", "adjusted_rating"):
+        if col in weekly.columns and weekly[col].notna().any():
+            return col
+    return None
+
+
 def narrative_ladder_week_allowlist(weekly: pd.DataFrame) -> frozenset[int] | None:
     """
     Week ids to KEEP for ladder statistics. Returns None if no warmup trim is applied
@@ -512,6 +522,7 @@ def get_country_top_n_timeseries(country: str, n: int = 5) -> dict[str, Any]:
 
     teams_df = load_teams()
     chart_col = strength_chart_column(country_data)
+    diff_col = diffused_weekly_column(country_data)
     teams_out: list[dict[str, Any]] = []
     for pid in top_pids:
         sub = country_data[country_data["pid"] == pid].sort_values("week")
@@ -521,11 +532,21 @@ def get_country_top_n_timeseries(country: str, n: int = 5) -> dict[str, Any]:
             if not name_row.empty
             else str(sub.iloc[0]["team_name"])
         )
-        series = (
-            sub[["week_date", chart_col]]
-            .rename(columns={chart_col: "rating"})
-            .to_dict(orient="records")
-        )
+        plot_df = sub[["week_date", chart_col]].rename(columns={chart_col: "rating"})
+        if diff_col:
+            plot_df = plot_df.assign(
+                diffused_rating=pd.to_numeric(sub[diff_col].to_numpy(), errors="coerce")
+            )
+        series: list[dict[str, Any]] = []
+        for _, row in plot_df.iterrows():
+            pt: dict[str, Any] = {
+                "week_date": row["week_date"],
+                "rating": float(row["rating"]) if pd.notna(row["rating"]) else None,
+            }
+            if diff_col:
+                dr = row["diffused_rating"]
+                pt["diffused_rating"] = float(dr) if pd.notna(dr) else None
+            series.append(pt)
         teams_out.append({"pid": int(pid), "team_name": team_name, "series": series})
 
     return {"teams": teams_out}

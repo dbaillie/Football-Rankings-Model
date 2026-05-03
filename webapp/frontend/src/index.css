@@ -567,8 +567,28 @@
         margin-bottom: 12px !important;
       }
 
+      .project-overview-section-heading {
+        margin: 0 0 8px;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        color: var(--text);
+      }
+
+      .project-overview-card .project-overview-section-heading:first-of-type {
+        margin-top: 2px;
+      }
+
+      .project-overview-card .project-overview-section-heading:not(:first-of-type) {
+        margin-top: 18px;
+      }
+
       .project-overview-list {
-        margin-bottom: 14px;
+        margin-bottom: 8px;
+      }
+
+      .project-overview-caveat {
+        margin-top: 14px;
       }
 
       .glossary-list {

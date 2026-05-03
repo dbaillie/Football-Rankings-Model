@@ -58,6 +58,26 @@ const MAP_PREMIUM_COLORSCALE = [
 
 const MAP_GEO_LINE = "#334155";
 
+/**
+ * Weekly diffused-strength Y values for the club chart, matching backend `diffused_weekly_column`:
+ * prefer `simple_adjusted_rating` when any row has a finite value, else `adjusted_rating`.
+ */
+function weeklyDiffusedY(teamSeries) {
+  if (!teamSeries.length) return null;
+  const preferSimple = teamSeries.some((d) => {
+    const v = d.simple_adjusted_rating;
+    return v != null && v !== "" && Number.isFinite(Number(v));
+  });
+  const key = preferSimple ? "simple_adjusted_rating" : "adjusted_rating";
+  const ys = teamSeries.map((d) => {
+    const v = d[key];
+    if (v == null || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  });
+  return ys.some((y) => y != null) ? ys : null;
+}
+
 /** Plotly config for embedded charts (mode bar off; map shouldn’t capture scroll zoom). */
 const PLOT_BASE_CONFIG = {
   displayModeBar: false,
@@ -559,7 +579,7 @@ function InfoPage({ navigate }) {
           <strong>μ</strong>, <strong>φ</strong>, and <strong>σ</strong> move before the next week.
         </p>
         <p className="small" style={{ marginBottom: 0 }}>
-          On this site, <strong>maps, charts, rankings, and automated write-ups</strong> use that raw Glicko strength
+          On this site, <strong>maps, charts, rating summaries, and automated write-ups</strong> use that raw Glicko strength
           (the rating, μ). For an optional lens that folds schedule context into one comparable curve — what we call{" "}
           <strong>diffused</strong> strength — see the{" "}
           <a
@@ -1893,14 +1913,14 @@ function App() {
       linecolor: "#334155",
     },
     yaxis: {
-      title: { text: "Glicko rating", font: { color: THEME.muted, size: 12 } },
+      title: { text: "Rating (μ & diffused)", font: { color: THEME.muted, size: 12 } },
       gridcolor: "#334155",
       zerolinecolor: "#334155",
       tickfont: { color: THEME.muted, size: 11 },
       color: THEME.muted,
       linecolor: "#334155",
     },
-    margin: { l: 50, r: 20, t: 24, b: 40 },
+    margin: { l: 50, r: 20, t: 56, b: 40 },
   };
 
   const teamPlotLayout = {
@@ -1922,40 +1942,73 @@ function App() {
       linecolor: "#334155",
     },
     yaxis: {
-      title: { text: "Glicko rating", font: { color: THEME.muted, size: 12 } },
+      title: { text: "Rating (μ & diffused)", font: { color: THEME.muted, size: 12 } },
       gridcolor: "#334155",
       zerolinecolor: "#334155",
       tickfont: { color: THEME.muted, size: 11 },
       color: THEME.muted,
       linecolor: "#334155",
     },
-    margin: { l: 50, r: 20, t: 20, b: 40 },
+    margin: { l: 50, r: 20, t: 24, b: 40 },
   };
 
-  const teamTrendData = [
-    {
-      x: teamSeries.map((d) => d.week_date),
-      y: teamSeries.map((d) => Number(d.rating)),
-      mode: "lines",
-      type: "scatter",
-      name: selectedTeam ? selectedTeam.team_name : "Team",
-      line: { color: THEME.primaryBright, width: 1.35, dash: "dot" },
-    },
-  ];
+  const teamTrendData = useMemo(() => {
+    const baseName = selectedTeam ? selectedTeam.team_name : "Team";
+    const x = teamSeries.map((d) => d.week_date);
+    const traces = [
+      {
+        x,
+        y: teamSeries.map((d) => Number(d.rating)),
+        mode: "lines",
+        type: "scatter",
+        name: `${baseName} (Glicko μ)`,
+        line: { color: THEME.primaryBright, width: 1.35 },
+      },
+    ];
+    const diffY = weeklyDiffusedY(teamSeries);
+    if (diffY) {
+      traces.push({
+        x,
+        y: diffY,
+        mode: "lines",
+        type: "scatter",
+        name: `${baseName} (diffused)`,
+        line: { color: THEME.accent, width: 1.35, dash: "dash" },
+      });
+    }
+    return traces;
+  }, [teamSeries, selectedTeam]);
 
   const countryTopFivePlotData = useMemo(() => {
     const teams = countryTopSeries?.teams;
     if (!teams || teams.length === 0) return [];
-    return teams.map((t, i) => {
+    return teams.flatMap((t, i) => {
       const c = COUNTRY_TOP5_LINE_COLORS[i % COUNTRY_TOP5_LINE_COLORS.length];
-      return {
-        x: t.series.map((p) => p.week_date),
+      const x = t.series.map((p) => p.week_date);
+      const glicko = {
+        x,
         y: t.series.map((p) => p.rating),
         mode: "lines",
         type: "scatter",
-        name: t.team_name,
-        line: { color: c, width: 1.35, dash: "dot" },
+        name: `${t.team_name} (μ)`,
+        line: { color: c, width: 1.35 },
       };
+      const hasDiffused = t.series.some((p) => {
+        const v = p.diffused_rating;
+        return v != null && Number.isFinite(Number(v));
+      });
+      if (!hasDiffused) return [glicko];
+      return [
+        glicko,
+        {
+          x,
+          y: t.series.map((p) => p.diffused_rating),
+          mode: "lines",
+          type: "scatter",
+          name: `${t.team_name} (diffused)`,
+          line: { color: c, width: 1.35, dash: "dash" },
+        },
+      ];
     });
   }, [countryTopSeries]);
 
@@ -1995,7 +2048,7 @@ function App() {
               height={32}
               decoding="async"
             />
-            Football Rankings
+            Football Ratings
           </a>
           <nav className="site-nav" aria-label="Primary">
             <a
@@ -2128,6 +2181,9 @@ function App() {
 
               <div className="card">
                 <h2>Rating Over Time</h2>
+                <p className="small" style={{ marginTop: "-8px" }}>
+                  Solid: Glicko μ (weekly rating). Dashed: diffused strength when available in the dataset.
+                </p>
                 <Plot data={teamTrendData} layout={teamPlotLayout} />
               </div>
 
@@ -2288,7 +2344,7 @@ function App() {
                 )}
               </h1>
               <p className="small">
-                Nation-level snapshot and how today&apos;s strongest clubs evolved week by week. Use the team
+                Nation-level snapshot and how today&apos;s highest-rated clubs evolved week by week. Use the team
                 picker to open a club&apos;s full match history.
               </p>
 
@@ -2346,8 +2402,9 @@ function App() {
               <div className="card">
                 <h2>Current Top 5 — History Over Time</h2>
                 <p className="small" style={{ marginTop: "-8px" }}>
-                  The five highest-rated clubs in this country in the latest rating week; each line follows that
-                  club across all rating weeks in the dataset.
+                  The five highest-rated clubs in this country in the latest rating week; each line follows that club
+                  across all rating weeks. Solid: Glicko μ; dashed: diffused strength (same color per club), when
+                  available.
                 </p>
                 {countryTopFivePlotData.length === 0 ? (
                   <p className="small" style={{ marginBottom: 0 }}>
@@ -2366,8 +2423,7 @@ function App() {
             <p className="sub-head">Ratings · European Clubs</p>
             <h1>European Club Ratings Explorer</h1>
             <p className="dashboard-card-subtle-lead explorer-hero-lead">
-              Explore a cross-league football ratings model covering European clubs, countries, rating uncertainty, and
-              forecast quality.
+              Explore cross-league club strength, rating uncertainty, and forecast quality across European football.
             </p>
             <p className="small explorer-hero-tagline">
               An interactive European football ratings model that compares clubs across domestic and continental
@@ -2381,29 +2437,25 @@ function App() {
 
           <div className="card project-overview-card">
             <h2 className="project-overview-title">Project Overview</h2>
+            <h3 className="project-overview-section-heading">Model purpose</h3>
             <ul className="small info-list project-overview-list">
+              <li>Estimates cross-league club strength from match results.</li>
+              <li>Supports club and country comparison across European football.</li>
+              <li>Includes rating uncertainty through RD.</li>
+            </ul>
+            <h3 className="project-overview-section-heading">Product and validation</h3>
+            <ul className="small info-list project-overview-list">
+              <li>Evaluates forecast quality using calibration views and error metrics.</li>
+              <li>Compares the model against a simple Elo-style baseline.</li>
               <li>
-                <strong>What it is</strong> — a European club rating system using match results to estimate strength
-                across countries and competitions.
-              </li>
-              <li>
-                <strong>Why it exists</strong> — league tables stay inside their competitions; this explorer estimates a
-                cross-league view so schedules and opponent pools remain visible.
-              </li>
-              <li>
-                <strong>What keeps it honest</strong> — predictions are checked against historical outcomes and compared
-                with a simple Elo-style baseline on the calibration pages.
-              </li>
-              <li>
-                <strong>What the build demonstrates</strong> — ingestion, rating design, validation, interactive Plotly
-                analytics, and API plus frontend deployment as one coherent product.
-              </li>
-              <li>
-                <strong>Caveats</strong> — not a betting model; coverage gaps, squad churn, injuries, home-advantage
-                assumptions, competition mix, and schedule imbalance all affect estimates.
+                Demonstrates an end-to-end data product: rating pipeline, API, frontend, and deployment.
               </li>
             </ul>
-            <p className="small" style={{ marginBottom: 0 }}>
+            <p className="small project-overview-caveat" style={{ marginBottom: 0 }}>
+              Caveats: this is not a betting model; results depend on data coverage, squad changes, injuries,
+              home-advantage assumptions, competition mix, and schedule imbalance.
+            </p>
+            <p className="small" style={{ marginBottom: 0, marginTop: "14px" }}>
               Need formulas or glossary entries? See{" "}
               <a
                 href="#/info"
@@ -2421,7 +2473,7 @@ function App() {
           {loading ? (
             <div className="card card-muted loading-pulse branded-loading" aria-busy="true">
               <p className="branded-loading-title" style={{ margin: "0 0 8px" }}>
-                Loading European Football Ratings…
+                Loading Football Ratings…
               </p>
               <p className="small" style={{ margin: 0 }}>
                 Fetching latest club ratings and calibration-ready aggregates.
@@ -2443,7 +2495,7 @@ function App() {
                 className="dashboard-kpi-label"
                 title="Country whose highest-rated eligible club tops the European ladder (map shading uses the same rule)."
               >
-                Strongest Club Country
+                Highest-Rated Club Country
               </p>
               <p className="dashboard-kpi-value">
                 {europeCountryLadder.rows[0]
@@ -2642,7 +2694,7 @@ function App() {
           </section>
 
           <div className="card">
-            <h2>Current Top 25</h2>
+            <h2>Current Top 25 Clubs</h2>
             <p className="small" style={{ marginTop: "-8px", marginBottom: "8px" }}>
               <strong>Click a club</strong> to view rating history and match detail. Sort by{" "}
               <strong>Glicko rating</strong> using the column control below (▼/▲ shows direction).

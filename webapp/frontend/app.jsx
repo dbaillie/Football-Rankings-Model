@@ -20,6 +20,25 @@ const UEFA_CODES = new Set(["UCL", "UEL", "UECL", "EURO"]);
 /** Lines for country “current top 5 over time” chart (distinct from map heat ramp). */
 const COUNTRY_TOP5_LINE_COLORS = ["#60A5FA", "#D6A84F", "#A78BFA", "#2DD4BF", "#FB923C"];
 
+/**
+ * Weekly diffused-strength Y values for the club chart (see backend `diffused_weekly_column`).
+ */
+function weeklyDiffusedY(teamSeries) {
+  if (!teamSeries.length) return null;
+  const preferSimple = teamSeries.some((d) => {
+    const v = d.simple_adjusted_rating;
+    return v != null && v !== "" && Number.isFinite(Number(v));
+  });
+  const key = preferSimple ? "simple_adjusted_rating" : "adjusted_rating";
+  const ys = teamSeries.map((d) => {
+    const v = d[key];
+    if (v == null || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  });
+  return ys.some((y) => y != null) ? ys : null;
+}
+
 /** Choropleth / markers: weak → strong (all blue — no green in the heat ramp) */
 const MAP_HEAT_COLORSCALE = [
   [0, "#1e293b"],
@@ -493,7 +512,7 @@ function DiffusedPage({ navigate }) {
               navigate("/");
             }}
           >
-            Map &amp; Top 25
+            Map &amp; Top 25 Clubs
           </a>
           .
         </p>
@@ -918,7 +937,7 @@ function CalibrationPage({ navigate, data, loading, error }) {
             navigate("/");
           }}
         >
-          ← Map & Rankings
+          ← Explorer
         </a>
       </nav>
 
@@ -1641,14 +1660,14 @@ function App() {
       linecolor: "#334155",
     },
     yaxis: {
-      title: { text: "Glicko rating", font: { color: THEME.muted, size: 12 } },
+      title: { text: "Rating (μ & diffused)", font: { color: THEME.muted, size: 12 } },
       gridcolor: "#334155",
       zerolinecolor: "#334155",
       tickfont: { color: THEME.muted, size: 11 },
       color: THEME.muted,
       linecolor: "#334155",
     },
-    margin: { l: 50, r: 20, t: 24, b: 40 },
+    margin: { l: 50, r: 20, t: 56, b: 40 },
   };
 
   const teamPlotLayout = {
@@ -1670,40 +1689,73 @@ function App() {
       linecolor: "#334155",
     },
     yaxis: {
-      title: { text: "Glicko rating", font: { color: THEME.muted, size: 12 } },
+      title: { text: "Rating (μ & diffused)", font: { color: THEME.muted, size: 12 } },
       gridcolor: "#334155",
       zerolinecolor: "#334155",
       tickfont: { color: THEME.muted, size: 11 },
       color: THEME.muted,
       linecolor: "#334155",
     },
-    margin: { l: 50, r: 20, t: 20, b: 40 },
+    margin: { l: 50, r: 20, t: 24, b: 40 },
   };
 
-  const teamTrendData = [
-    {
-      x: teamSeries.map((d) => d.week_date),
-      y: teamSeries.map((d) => Number(d.rating)),
-      mode: "lines",
-      type: "scatter",
-      name: selectedTeam ? selectedTeam.team_name : "Team",
-      line: { color: THEME.primaryBright, width: 1.35, dash: "dot" },
-    },
-  ];
+  const teamTrendData = useMemo(() => {
+    const baseName = selectedTeam ? selectedTeam.team_name : "Team";
+    const x = teamSeries.map((d) => d.week_date);
+    const traces = [
+      {
+        x,
+        y: teamSeries.map((d) => Number(d.rating)),
+        mode: "lines",
+        type: "scatter",
+        name: `${baseName} (Glicko μ)`,
+        line: { color: THEME.primaryBright, width: 1.35 },
+      },
+    ];
+    const diffY = weeklyDiffusedY(teamSeries);
+    if (diffY) {
+      traces.push({
+        x,
+        y: diffY,
+        mode: "lines",
+        type: "scatter",
+        name: `${baseName} (diffused)`,
+        line: { color: THEME.accent, width: 1.35, dash: "dash" },
+      });
+    }
+    return traces;
+  }, [teamSeries, selectedTeam]);
 
   const countryTopFivePlotData = useMemo(() => {
     const teams = countryTopSeries?.teams;
     if (!teams || teams.length === 0) return [];
-    return teams.map((t, i) => {
+    return teams.flatMap((t, i) => {
       const c = COUNTRY_TOP5_LINE_COLORS[i % COUNTRY_TOP5_LINE_COLORS.length];
-      return {
-        x: t.series.map((p) => p.week_date),
+      const x = t.series.map((p) => p.week_date);
+      const glicko = {
+        x,
         y: t.series.map((p) => p.rating),
         mode: "lines",
         type: "scatter",
-        name: t.team_name,
-        line: { color: c, width: 1.35, dash: "dot" },
+        name: `${t.team_name} (μ)`,
+        line: { color: c, width: 1.35 },
       };
+      const hasDiffused = t.series.some((p) => {
+        const v = p.diffused_rating;
+        return v != null && Number.isFinite(Number(v));
+      });
+      if (!hasDiffused) return [glicko];
+      return [
+        glicko,
+        {
+          x,
+          y: t.series.map((p) => p.diffused_rating),
+          mode: "lines",
+          type: "scatter",
+          name: `${t.team_name} (diffused)`,
+          line: { color: c, width: 1.35, dash: "dash" },
+        },
+      ];
     });
   }, [countryTopSeries]);
 
@@ -1742,7 +1794,7 @@ function App() {
               height={32}
               decoding="async"
             />
-            Football Rankings
+            Football Ratings
           </a>
           <nav className="site-nav" aria-label="Primary">
             <a
@@ -1753,7 +1805,7 @@ function App() {
                 navigate("/");
               }}
             >
-              Map & Top 25
+              Map & Top 25 Clubs
             </a>
             <a
               className="link-btn link-btn--header"
@@ -1819,7 +1871,7 @@ function App() {
                 navigate("/");
               }}
             >
-              ← Map & Rankings
+              ← Explorer
             </a>
             {clubCountrySlug ? (
               <a
@@ -1875,6 +1927,9 @@ function App() {
 
               <div className="card">
                 <h2>Rating Over Time</h2>
+                <p className="small" style={{ marginTop: "-8px" }}>
+                  Solid: Glicko μ (weekly rating). Dashed: diffused strength when available in the dataset.
+                </p>
                 <Plot data={teamTrendData} layout={teamPlotLayout} />
               </div>
 
@@ -2007,7 +2062,7 @@ function App() {
                 navigate("/");
               }}
             >
-              ← Map & Rankings
+              ← Explorer
             </a>
           </nav>
 
@@ -2035,7 +2090,7 @@ function App() {
                 )}
               </h1>
               <p className="small">
-                Nation-level snapshot and how today&apos;s strongest clubs evolved week by week. Use the team
+                Nation-level snapshot and how today&apos;s highest-rated clubs evolved week by week. Use the team
                 picker to open a club&apos;s full match history.
               </p>
 
@@ -2093,8 +2148,9 @@ function App() {
               <div className="card">
                 <h2>Current Top 5 — History Over Time</h2>
                 <p className="small" style={{ marginTop: "-8px" }}>
-                  The five highest-rated clubs in this country in the latest rating week; each line follows that
-                  club across all rating weeks in the dataset.
+                  The five highest-rated clubs in this country in the latest rating week; each line follows that club
+                  across all rating weeks. Solid: Glicko μ; dashed: diffused strength (same color per club), when
+                  available.
                 </p>
                 {countryTopFivePlotData.length === 0 ? (
                   <p className="small" style={{ marginBottom: 0 }}>
@@ -2113,7 +2169,7 @@ function App() {
             <p className="sub-head">Ratings · European Clubs</p>
             <h1>Ratings Dashboard</h1>
             <p className="small">
-              Hover countries for a snapshot; <strong>click</strong> to open detail. Rankings below use{" "}
+              Hover countries for a snapshot; <strong>click</strong> to open detail. The table below uses{" "}
               <strong>Glicko rating</strong> for the latest rating week (see{" "}
               <a
                 href="#/diffused"
@@ -2133,7 +2189,7 @@ function App() {
               <div className="map-card-intro">
                 <h2>European Ratings Map</h2>
                 <p className="small" style={{ marginTop: 0, paddingBottom: "12px" }}>
-                  Shading shows each nation&apos;s <strong>strongest</strong> club — deeper slate blues are weaker;
+                  Shading shows each nation&apos;s <strong>highest-rated</strong> club — deeper slate blues are weaker;
                   brighter royal blues are stronger. Hover for a snapshot; <strong>click</strong> a country to open its
                   page.
                 </p>
@@ -2170,12 +2226,12 @@ function App() {
 
           {loading && (
             <div className="card card-muted loading-pulse" aria-busy="true">
-              <p style={{ margin: 0 }}>Loading ratings…</p>
+              <p style={{ margin: 0 }}>Loading Football Ratings…</p>
             </div>
           )}
 
           <div className="card">
-            <h2>Current Top 25</h2>
+            <h2>Current Top 25 Clubs</h2>
             <p className="small" style={{ marginTop: "-8px", marginBottom: "14px" }}>
               Latest rating week by <strong>Glicko rating</strong>. Only clubs with more than five matches in each of 2024,
               2025, and 2026 appear here and on the map (see About). Rows are clickable — open a club&apos;s full history.

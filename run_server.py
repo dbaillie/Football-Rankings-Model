@@ -11,7 +11,7 @@ if __name__ == "__main__":
     print(
         "\n"
         "================================================================================\n"
-        f"  Football Rankings — http://127.0.0.1:{port}\n"
+        f"  Football Ratings — http://127.0.0.1:{port}\n"
         "  Open that URL (same port) so /api/* matches this process.\n"
         "\n"
         "  If http://127.0.0.1:8000/api/ping-club returns {\"detail\":\"Not Found\"} but\n"
