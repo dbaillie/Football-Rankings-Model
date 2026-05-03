@@ -20,6 +20,9 @@ const UEFA_CODES = new Set(["UCL", "UEL", "UECL", "EURO"]);
 /** Lines for country “current top 5 over time” chart (distinct from map heat ramp). */
 const COUNTRY_TOP5_LINE_COLORS = ["#60A5FA", "#D6A84F", "#A78BFA", "#2DD4BF", "#FB923C"];
 
+/** Must be ≤ FastAPI `top_n` max on `/api/snapshot`. */
+const SNAPSHOT_FETCH_TOP_N = 10_000;
+
 /** Choropleth / markers: weak → strong (all blue — no green in the heat ramp) */
 const MAP_HEAT_COLORSCALE = [
   [0, "#1e293b"],
@@ -506,7 +509,7 @@ function DiffusedPage({ navigate }) {
               navigate("/");
             }}
           >
-            Map &amp; Top 25 Clubs
+            Map &amp; clubs
           </a>
           .
         </p>
@@ -1265,7 +1268,7 @@ function App() {
         const [countriesData, teamsData, snapshot, summariesData] = await Promise.all([
           getJson("/api/countries"),
           getJson("/api/teams"),
-          getJson("/api/snapshot?top_n=25"),
+          getJson(`/api/snapshot?top_n=${SNAPSHOT_FETCH_TOP_N}`),
           getJson("/api/country-summaries", { allow404: true }),
         ]);
         setCountries(countriesData);
@@ -1772,7 +1775,7 @@ function App() {
                 navigate("/");
               }}
             >
-              Map & Top 25 Clubs
+              Map & clubs
             </a>
             <a
               className="link-btn link-btn--header"
@@ -2198,11 +2201,11 @@ function App() {
           )}
 
           <div className="card">
-            <h2>Current Top 25 Clubs</h2>
+            <h2>Latest week — all clubs</h2>
             <p className="small" style={{ marginTop: "-8px", marginBottom: "14px" }}>
-              Latest rating week by <strong>Glicko rating</strong>. Only clubs with more than five matches in each of 2024,
-              2025, and 2026 appear here and on the map (see About). Rows are clickable — open a club&apos;s full history.
-              Click the rating header to flip ascending / descending (default matches server order).
+              Every eligible club in the latest rating week by <strong>Glicko rating</strong>. Only clubs with more than
+              five matches in each of 2024, 2025, and 2026 appear here and on the map (see About). Rows are clickable — open
+              a club&apos;s full history. Click the rating header to flip ascending / descending.
             </p>
             <div className="table-scroll">
             <table>

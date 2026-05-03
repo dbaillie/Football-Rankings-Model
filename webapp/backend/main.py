@@ -183,7 +183,7 @@ def health_minimal() -> dict[str, str]:
 
 @app.get("/ratings")
 def ratings_csv_public(
-    top_n: int = Query(default=100, ge=1, le=500, description="Rows from latest rating week."),
+    top_n: int = Query(default=100, ge=1, le=10000, description="Rows from latest rating week."),
     offset: int = Query(default=0, ge=0, description="Skip this many rows after ranking."),
 ) -> list[dict]:
     """Latest-week snapshot rows (paginated). Same backing data as `/api/snapshot`."""
@@ -276,7 +276,7 @@ def teams(country: str | None = Query(default=None)) -> list[dict]:
 
 @app.get("/api/snapshot")
 def snapshot(
-    top_n: int = Query(default=25, ge=1, le=500),
+    top_n: int = Query(default=25, ge=1, le=10000),
     offset: int = Query(default=0, ge=0),
 ) -> list[dict]:
     return get_latest_snapshot(top_n=top_n, offset=offset)

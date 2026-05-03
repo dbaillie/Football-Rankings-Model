@@ -58,6 +58,9 @@ const MAP_PREMIUM_COLORSCALE = [
 
 const MAP_GEO_LINE = "#334155";
 
+/** Latest-week snapshot fetch size (must be ≤ FastAPI `top_n` max on `/api/snapshot`). */
+const SNAPSHOT_FETCH_TOP_N = 10_000;
+
 /** Plotly config for embedded charts (mode bar off; map shouldn’t capture scroll zoom). */
 const PLOT_BASE_CONFIG = {
   displayModeBar: false,
@@ -1289,7 +1292,7 @@ function App() {
   const [countryTopSeries, setCountryTopSeries] = useState(null);
   const [countryNarrative, setCountryNarrative] = useState(null);
   const [biggestMatches, setBiggestMatches] = useState({ upsets: [], swings: [] });
-  /** Latest-week ratings (up to 500 rows) for map-side insights + top-25 table. */
+  /** Latest-week ratings (full eligible set from `/api/snapshot`) for map insights + clubs table. */
   const [latestRatingsRows, setLatestRatingsRows] = useState([]);
   /** Client reorder of top snapshot by Glicko rating only (server default is newest-week desc). */
   const [snapshotRatingSortDir, setSnapshotRatingSortDir] = useState("desc");
@@ -1382,7 +1385,7 @@ function App() {
         const [countriesData, teamsData, snapshot, summariesData] = await Promise.all([
           getJson("/api/countries"),
           getJson("/api/teams"),
-          getJson("/api/snapshot?top_n=500"),
+          getJson(`/api/snapshot?top_n=${SNAPSHOT_FETCH_TOP_N}`),
           getJson("/api/country-summaries", { allow404: true }),
         ]);
         setCountries(Array.isArray(countriesData) ? countriesData : []);
@@ -1559,11 +1562,9 @@ function App() {
     return teams.filter((team) => team.country_name.toLowerCase() === slug.toLowerCase());
   }, [teams, selectedCountry, route.page, route.country]);
 
-  const topSnapshot = useMemo(() => latestRatingsRows.slice(0, 25), [latestRatingsRows]);
-
   const sortedTopSnapshot = useMemo(() => {
-    if (!topSnapshot.length) return [];
-    const rows = topSnapshot.slice();
+    if (!latestRatingsRows.length) return [];
+    const rows = latestRatingsRows.slice();
     const tieBreak = (a, b) =>
       String(a.team_name || "").localeCompare(String(b.team_name || ""), undefined, {
         sensitivity: "base",
@@ -1574,7 +1575,15 @@ function App() {
       return tieBreak(a, b);
     });
     return rows;
-  }, [topSnapshot, snapshotRatingSortDir]);
+  }, [latestRatingsRows, snapshotRatingSortDir]);
+
+  const ladderRankByPid = useMemo(() => {
+    const m = new Map();
+    sortedTopSnapshot.forEach((r, i) => {
+      m.set(String(r.pid), i + 1);
+    });
+    return m;
+  }, [sortedTopSnapshot]);
 
   const topTableCountryOptions = useMemo(() => {
     const set = new Set();
@@ -2660,13 +2669,14 @@ function App() {
           </section>
 
           <div className="card">
-            <h2>Current Top 25 Clubs</h2>
+            <h2>Latest week — all clubs</h2>
             <p className="small" style={{ marginTop: "-8px", marginBottom: "8px" }}>
-              <strong>Click a club</strong> to view rating history and match detail. Sort by{" "}
-              <strong>Glicko rating</strong> using the column control below (▼/▲ shows direction).
+              Every eligible club in the latest rating week. Use <strong>search</strong> and <strong>country</strong> to
+              narrow the list. <strong>Click a club</strong> for history and match detail. Sort by{" "}
+              <strong>Glicko rating</strong> (▼/▲ shows direction).
             </p>
             <p className="small" style={{ marginBottom: "14px" }}>
-              Latest rating week only; eligibility filters apply (see Methodology). Week labels follow{" "}
+              Eligibility filters apply (see Methodology). Week labels follow{" "}
               <abbr title={WEEK_ID_FORMAT_HINT}>YYYYWW</abbr> with an optional week-ending date when provided by the
               pipeline.
             </p>
@@ -2739,15 +2749,14 @@ function App() {
                     </button>
                   </th>
                   <th title="Rating deviation — higher means more uncertainty around the rating estimate.">
-                    {topSnapshot.some((r) => r.total_rd != null) ? "RD (total)" : "RD"}
+                    {latestRatingsRows.some((r) => r.total_rd != null) ? "RD (total)" : "RD"}
                   </th>
                   {/* TODO: add movement vs prior week when backend exposes previous-week ratings in snapshot payload */}
                 </tr>
               </thead>
               <tbody>
                 {displayedTopSnapshot.map((row) => {
-                  const ladderRank =
-                    sortedTopSnapshot.findIndex((r) => String(r.pid) === String(row.pid)) + 1;
+                  const ladderRank = ladderRankByPid.get(String(row.pid)) ?? 0;
                   return (
                   <tr
                     key={row.pid}
