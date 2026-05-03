@@ -568,6 +568,33 @@
         margin-top: 8px;
       }
 
+      /* Info page — readable equation blocks (no MathJax). */
+      .info-equation {
+        margin: 12px 0;
+        padding: 14px 16px;
+        border-radius: var(--radius-sm);
+        background: color-mix(in srgb, var(--bg) 45%, var(--surface-alt));
+        border: 1px solid var(--border);
+        font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", monospace;
+        font-size: 0.82rem;
+        line-height: 1.65;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .info-equation-label {
+        display: block;
+        font-family: "DM Sans", system-ui, sans-serif;
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        margin-bottom: 6px;
+      }
+
       .contact-card .contact-form {
         position: relative;
       }

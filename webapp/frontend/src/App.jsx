@@ -388,6 +388,41 @@ function InfoPage({ navigate }) {
       </div>
 
       <div className="card">
+        <h2>Glicko-2 — core equations (sketch)</h2>
+        <p className="small" style={{ marginBottom: "12px" }}>
+          Each club carries a mean rating <strong>μ</strong>, a rating deviation <strong>φ</strong> (uncertainty), and a
+          volatility <strong>σ</strong>. Updates happen each <strong>rating week</strong> from observed scores (win /
+          draw / loss mapped to 1 / ½ / 0). The algebra below is the usual compact form; full derivations are in
+          Mark Glickman&apos;s Glicko-2 note.
+        </p>
+        <p className="small" style={{ marginBottom: "8px" }}>
+          <strong>RD damping</strong> — high opponent uncertainty enters expectations through:
+        </p>
+        <div className="info-equation" aria-label="RD damping formula">
+          <span className="info-equation-label">Opponent scaling factor</span>
+          {`g(φ_j) = √( 1 + 3φ_j² / π² )`}
+        </div>
+        <p className="small" style={{ marginBottom: "8px", marginTop: "14px" }}>
+          <strong>Expected score</strong> for side <em>i</em> vs <em>j</em> (same logistic backbone as Elo, with an
+          effective gap weighted by <em>j</em>&apos;s uncertainty):
+        </p>
+        <div className="info-equation" aria-label="Expected score formula">
+          <span className="info-equation-label">Match expectation</span>
+          {`E_ij = 1 / ( 1 + 10^( -( g(φ_j)(μ_i - μ_j) ) / 400 ) )`}
+        </div>
+        <p className="small" style={{ marginBottom: "8px", marginTop: "14px" }}>
+          Outcomes are compared to <strong>E</strong>; surprise results and volatility <strong>σ</strong> control how
+          aggressively <strong>μ</strong>, <strong>φ</strong>, and <strong>σ</strong> move before the next week.
+        </p>
+        <p className="small" style={{ marginBottom: 0 }}>
+          <strong>Infusion on this site:</strong> we treat that Glicko update as the <strong>spine</strong>, then lightly{" "}
+          <strong>infuse</strong> schedule comparability and cross-context exposure (what shows up as{" "}
+          <strong>simple adjusted strength</strong> and related curves) so browsing strength isn&apos;t &quot;naked&quot;
+          μ — without replacing the underlying Glicko step. Heavier GCAM-style diagnostics stay in exports for analysis.
+        </p>
+      </div>
+
+      <div className="card">
         <h2>Comparability strength (simple layer)</h2>
         <p className="small" style={{ marginBottom: 0 }}>
           After Glicko-2, a <strong>simplified comparability layer</strong> produces{" "}
