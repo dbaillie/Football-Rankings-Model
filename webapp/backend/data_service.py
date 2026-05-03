@@ -709,7 +709,7 @@ def get_latest_snapshot(top_n: int = 25, offset: int = 0) -> list[dict[str, Any]
     latest = latest[latest["pid"].isin(eligible)]
     rank_col = ladder_sort_column(latest)
     latest = latest.sort_values(rank_col, ascending=False).iloc[offset : offset + top_n]
-    base_cols = ["pid", "team_name", "country_name", "rating", "rd", "week"]
+    base_cols = ["pid", "team_name", "country_name", "rating", "rd", "week", "week_date"]
     extra = [
         c
         for c in (

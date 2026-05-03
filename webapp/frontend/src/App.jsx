@@ -117,6 +117,29 @@ function mapHeatValue(p) {
   return Number.isFinite(avg) ? avg : 1500;
 }
 
+/** Week ids use YYYYWW (pipeline rating-week index). Optional weekDateIso is YYYY-MM-DD from weekly ratings. */
+function formatRatingWeekCaption(weekId, weekDateIso) {
+  if (weekId == null || !Number.isFinite(Number(weekId))) return "—";
+  const wid = Number(weekId);
+  let suffix = "";
+  const raw = weekDateIso != null ? String(weekDateIso).trim() : "";
+  if (raw) {
+    const d = new Date(`${raw.slice(0, 10)}T12:00:00Z`);
+    if (!Number.isNaN(d.getTime())) {
+      suffix = ` — week ending ${d.toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        timeZone: "UTC",
+      })}`;
+    }
+  }
+  return `Week ${wid}${suffix}`;
+}
+
+const WEEK_ID_FORMAT_HINT =
+  "Week labels use YYYYWW: calendar year plus a two-digit rating-week index used in the pipeline (fixtures may be grouped across dates).";
+
 function friendlyHttpStatusMessage(status) {
   if (status === 404) return "That content wasn't found.";
   if (status >= 500) return "The service is temporarily unavailable. Please try again.";
@@ -342,30 +365,151 @@ function useHashRoute() {
   return { route, navigate, hash };
 }
 
-/** Public-facing explainers for ratings and the dashboard. */
+/** Methodology, limitations, and glossary (professional framing for the ratings product). */
 function InfoPage({ navigate }) {
   return (
     <>
       <header className="page-hero">
-        <h1>How the Ratings Work</h1>
+        <h1>Methodology</h1>
         <p className="small">
-          What the numbers mean, how they&apos;re produced, and how to read this site — without diving into
-          implementation detail.
+          How the European club ratings are estimated, validated, and exposed through this interactive product — in
+          plain language.
         </p>
       </header>
 
       <div className="card">
-        <h2>Rating System</h2>
+        <h2>What the Model Does</h2>
         <p className="small" style={{ marginBottom: "12px" }}>
-          Each club has a <strong>rating</strong> (strength estimate) and uncertainty that update after matches.
-          The model uses <strong>Glicko-2</strong>, an extension of Elo suited to intermittent play: results are
-          rolled into <strong>rating weeks</strong>, so updates may bundle several fixtures rather than firing after
-          every single match day.
+          Clubs receive a <strong>Glicko-2 rating</strong> (mean strength) and an uncertainty band after match results
+          are processed. Ratings update over <strong>rating weeks</strong>, so several fixtures may roll into one step.
+          Uncertainty is summarised on this site as <strong>RD</strong> (rating deviation): higher RD means less
+          confidence in the point estimate.
         </p>
         <p className="small" style={{ marginBottom: 0 }}>
-          A higher <strong>rating</strong> means stronger expected results against typical opponents; big surprises and
-          tight margins move ratings more than routine wins.
+          The explorer compares clubs <strong>across countries and competitions</strong> in one continuous European run,
+          separate from any single league table.
         </p>
+      </div>
+
+      <div className="card">
+        <h2>Why Ratings Instead of League Tables</h2>
+        <p className="small" style={{ marginBottom: 0 }}>
+          Domestic tables reward points within one competition structure. Ratings instead <strong>estimate strength from
+          results</strong> and let you compare sides that rarely meet — useful when schedules, opponent pools, and
+          European minutes differ sharply between leagues.
+        </p>
+      </div>
+
+      <div className="card">
+        <h2>Validation</h2>
+        <p className="small" style={{ marginBottom: 0 }}>
+          Forecasts from the rating engine are <strong>compared to realised outcomes</strong> using aggregate error
+          measures (MAE, RMSE on a 0–1 outcome score) and <strong>calibration curves</strong> by pre-match rating gap.
+          A simple <strong>Elo-400 baseline</strong> is shown alongside Glicko as a sanity-check reference — not a claim
+          of superiority.
+        </p>
+      </div>
+
+      <div className="card">
+        <h2>Technical Build</h2>
+        <p className="small" style={{ marginBottom: 0 }}>
+          End-to-end personal analytics project: <strong>Python</strong> rating and data pipeline,{" "}
+          <strong>FastAPI</strong> backend, <strong>React</strong> frontend, <strong>Plotly</strong> visualisations, and
+          a deployed web bundle with versioned outputs.
+        </p>
+      </div>
+
+      <div className="card">
+        <h2>Limitations</h2>
+        <p className="small" style={{ marginBottom: "12px" }}>
+          This is a <strong>personal analytical project</strong>, not a betting service or guaranteed forecasting
+          product. Strength estimates depend on <strong>data coverage</strong>, which competitions feed the run, home
+          advantage handling, squad churn, injuries, coaching effects, and uneven schedules — all of which ratings only
+          approximate.
+        </p>
+        <p className="small" style={{ marginBottom: 0 }}>
+          Interpret outputs as structured exploration of historical results and model behaviour, not financial advice or
+          market timing.
+        </p>
+      </div>
+
+      <div className="card">
+        <h2>Glossary</h2>
+        <p className="small" style={{ marginBottom: "14px" }}>
+          Hover table headers on the explorer or calibration pages for the same quick definitions where available.
+        </p>
+        <dl className="glossary-list">
+          <div>
+            <dt>Glicko rating</dt>
+            <dd>
+              Mean strength estimate from the Glicko-2 update — analogous to Elo but with explicit uncertainty and
+              volatility terms.
+            </dd>
+          </div>
+          <div>
+            <dt>RD</dt>
+            <dd>
+              Rating deviation: uncertainty around the club&apos;s rating; higher values mean the estimate is less
+              settled (often fewer recent games or noisy results).
+            </dd>
+          </div>
+          <div>
+            <dt>RD (total)</dt>
+            <dd>
+              When present, a bundled uncertainty figure derived in the pipeline alongside trust/connectivity fields —
+              still interpreted like RD (wider means less certainty).
+            </dd>
+          </div>
+          <div>
+            <dt>Calibration</dt>
+            <dd>
+              Checks whether predicted outcome scores line up with empirical results across bands of pre-match rating
+              difference — where the model tends to match reality and where it drifts.
+            </dd>
+          </div>
+          <div>
+            <dt>MAE</dt>
+            <dd>
+              Mean absolute error between predicted and realised <strong>match outcome scores</strong> (home win = 1,
+              draw = 0.5, away win = 0).
+            </dd>
+          </div>
+          <div>
+            <dt>RMSE</dt>
+            <dd>
+              Root mean square error on the same outcome score — penalises larger misses more than MAE.
+            </dd>
+          </div>
+          <div>
+            <dt>Rating gap</dt>
+            <dd>
+              Difference between teams&apos; pre-match ratings (here usually home minus away) before kick-off; drives
+              expected scores in both Glicko and the Elo-style baseline.
+            </dd>
+          </div>
+          <div>
+            <dt>Home advantage</dt>
+            <dd>
+              Embedded implicitly through results and update rules; calibration plots separate performance by how strong
+              the home side was rated before the match (not a standalone slider on this site).
+            </dd>
+          </div>
+          <div>
+            <dt>Elo-400 baseline</dt>
+            <dd>
+              Simple reference curve using a standard 400-point logistic mapping from rating difference to expectation —
+              included to sanity-check Glicko aggregates, not as a competitor claim.
+            </dd>
+          </div>
+          <div>
+            <dt>Diffused strength</dt>
+            <dd>
+              Schedule-comparability lens that spreads strength information through cross-context fixtures, helping
+              describe how connected leagues or opponent pools are — distinct from the raw weekly Glicko update shown on
+              the main explorer.
+            </dd>
+          </div>
+        </dl>
       </div>
 
       <div className="card">
@@ -406,7 +550,7 @@ function InfoPage({ navigate }) {
               navigate("/diffused");
             }}
           >
-            Diffused
+            Diffused Strength
           </a>{" "}
           page.
         </p>
@@ -417,7 +561,7 @@ function InfoPage({ navigate }) {
         <p className="small" style={{ marginBottom: 0 }}>
           Behind the scenes the project can also derive <strong>simple adjusted strength</strong> after Glicko —
           blending cross-league schedule exposure and optional strength-of-schedule anchors.{" "}
-          <strong>That is not what you see</strong> on the main dashboard; it is mainly for downloads and research. For
+          <strong>That is not what you see</strong> on the main explorer; it is mainly for downloads and research. For
           the intuition, read{" "}
           <a
             href="#/diffused"
@@ -426,7 +570,7 @@ function InfoPage({ navigate }) {
               navigate("/diffused");
             }}
           >
-            Diffused
+            Diffused Strength
           </a>
           .
         </p>
@@ -436,16 +580,16 @@ function InfoPage({ navigate }) {
         <h2>Using This Site</h2>
         <ul className="small info-list">
           <li>
-            <strong>Dashboard</strong> — explore Europe on the map, compare countries, open clubs for fixtures and
-            rating history, and browse the current top table.
+            <strong>European Club Ratings Explorer</strong> — interactive map, country summaries, club histories, and a
+            filterable top table grounded in the latest rating week.
           </li>
           <li>
-            <strong>Diffused</strong> — separate explainer on schedule-diffusion / comparability (not the default
-            strength curve here).
+            <strong>Diffused Strength</strong> — schedule-adjusted comparability context (not the default strength curve
+            on the explorer).
           </li>
           <li>
-            <strong>Ratings</strong> describe historical strength in one continuous European run; they are not betting
-            tips or guarantees about future results.
+            <strong>Ratings</strong> estimate historical strength from results; they do not guarantee future outcomes or
+            constitute betting advice.
           </li>
           <li>
             <strong>
@@ -459,7 +603,7 @@ function InfoPage({ navigate }) {
                 Calibration
               </a>
             </strong>{" "}
-            — checks how well model forecasts line up with actual scores and outcomes across pre-match rating gaps.
+            — evaluates how predicted outcome scores track realised results across pre-match rating gaps.
           </li>
         </ul>
       </div>
@@ -492,9 +636,9 @@ function InfoPage({ navigate }) {
       </div>
 
       <div className="card">
-        <h2>About</h2>
+        <h2>Built By</h2>
         <p className="small" style={{ marginBottom: 0 }}>
-          Built by <strong>Douglas Baillie</strong>. Contact:{" "}
+          Built by <strong>Douglas Baillie</strong> as a personal sports analytics project. Contact:{" "}
           <a href="mailto:douglasbaillie@live.co.uk">douglasbaillie@live.co.uk</a>
         </p>
       </div>
@@ -502,12 +646,15 @@ function InfoPage({ navigate }) {
   );
 }
 
-/** Conceptual overview of “diffused” / comparability strength (not plotted on the main dashboard). */
+/** Conceptual overview of “diffused” / comparability strength (not plotted on the main explorer). */
 function DiffusedPage({ navigate }) {
   return (
     <>
       <header className="page-hero">
         <h1>Diffused Strength</h1>
+        <p className="sub-head narrow-subhead">
+          Schedule-adjusted comparability context across countries and competitions.
+        </p>
         <p className="small">
           Why an optional layer exists next to raw Glicko, and why this site keeps browsing on{" "}
           <strong>rating</strong> (μ).
@@ -521,7 +668,7 @@ function DiffusedPage({ navigate }) {
           the authoritative sporting signal: it is tuned for prediction within the rating system and respects sparse play.
         </p>
         <p className="small" style={{ marginBottom: 0 }}>
-          The dashboard map, country charts, club trajectories, top table, and generated narratives therefore read{" "}
+          The explorer map, country charts, club trajectories, top table, and generated narratives therefore read{" "}
           <strong>rating</strong> so what you see matches the core model output.
         </p>
       </div>
@@ -562,7 +709,7 @@ function DiffusedPage({ navigate }) {
               navigate("/");
             }}
           >
-            Map &amp; Top 25
+            Explorer
           </a>
           .
         </p>
@@ -826,24 +973,36 @@ function CalibrationPage({ navigate, data, loading, error }) {
             navigate("/");
           }}
         >
-          ← Map & Rankings
+          ← Explorer
         </a>
       </nav>
 
       <header className="page-hero">
         <p className="sub-head">Forecast Quality</p>
         <h1>Prediction Calibration</h1>
+        <p className="sub-head narrow-subhead" style={{ marginTop: "-6px", marginBottom: "12px" }}>
+          Do the ratings actually predict match outcomes?
+        </p>
         <p className="small">
           Fixtures are grouped by how much stronger the home side was on paper before kick-off (home rating minus away
           rating). For each band you can compare typical <strong>results</strong> (win&nbsp;=&nbsp;1, draw&nbsp;=&nbsp;0.5,
           loss&nbsp;=&nbsp;0) with the model&apos;s average expectation and a simple reference curve — a sanity check
           that forecasts behave sensibly across mismatches.
         </p>
+        <p className="small" style={{ marginBottom: 0 }}>
+          The calibration view checks whether stronger-rated sides win more often in practice, and whether expected
+          outcome scores stay aligned with realised results across mismatches.
+        </p>
       </header>
 
       {loading ? (
-        <div className="card card-muted loading-pulse">
-          <p>Loading calibration charts…</p>
+        <div className="card card-muted loading-pulse branded-loading" aria-busy="true">
+          <p className="branded-loading-title" style={{ margin: 0 }}>
+            Loading calibration analysis…
+          </p>
+          <p className="small" style={{ margin: "8px 0 0" }}>
+            Fetching validation curves and aggregate error metrics.
+          </p>
         </div>
       ) : error ? (
         <div className="card error">
@@ -861,7 +1020,9 @@ function CalibrationPage({ navigate, data, loading, error }) {
         </div>
       ) : !bins.length ? (
         <div className="card card-muted">
-          <p>Calibration charts aren&apos;t available yet.</p>
+          <p className="empty-state-msg" style={{ margin: 0 }}>
+            No rating data available for this calibration view yet.
+          </p>
         </div>
       ) : (
         <>
@@ -919,7 +1080,9 @@ function CalibrationPage({ navigate, data, loading, error }) {
                 </thead>
                 <tbody>
                   <tr>
-                    <td>MAE (vs realised score)</td>
+                    <td title="Mean absolute error between predicted and realised outcome scores (home win = 1, draw = 0.5, away win = 0).">
+                      MAE (vs realised score)
+                    </td>
                     <td className="rating-strong">
                       {gm.mae_expected_score_glicko_pred != null
                         ? Number(gm.mae_expected_score_glicko_pred).toFixed(4)
@@ -932,7 +1095,9 @@ function CalibrationPage({ navigate, data, loading, error }) {
                     </td>
                   </tr>
                   <tr>
-                    <td>RMSE</td>
+                    <td title="Root mean square error on the same outcome score — larger misses count more than MAE.">
+                      RMSE
+                    </td>
                     <td>
                       {gm.rmse_expected_score_glicko_pred != null
                         ? Number(gm.rmse_expected_score_glicko_pred).toFixed(4)
@@ -945,7 +1110,9 @@ function CalibrationPage({ navigate, data, loading, error }) {
                     </td>
                   </tr>
                   <tr>
-                    <td>Mean outcome vs mean forecast</td>
+                    <td title="Average realised outcome score compared with average predicted expectation across evaluated fixtures.">
+                      Mean outcome vs mean forecast
+                    </td>
                     <td colSpan={2} className="small">
                       {gm.mean_actual_score != null ? Number(gm.mean_actual_score).toFixed(4) : "—"} realised vs{" "}
                       {gm.mean_pred_pA != null ? Number(gm.mean_pred_pA).toFixed(4) : "—"} predicted.
@@ -954,6 +1121,11 @@ function CalibrationPage({ navigate, data, loading, error }) {
                 </tbody>
               </table>
             </div>
+            <p className="small" style={{ marginTop: "14px", marginBottom: 0, color: THEME.muted, lineHeight: 1.55 }}>
+              On aggregate error the Glicko model tends to land close to the Elo-400 baseline — useful context, not a
+              headline victory claim. The charts below show where forecasts track realised outcomes and where favourites
+              or underdogs may be overstated or understated.
+            </p>
           </div>
 
           <div className="card">
@@ -996,6 +1168,10 @@ function CalibrationPage({ navigate, data, loading, error }) {
 
           <div className="card">
             <h2>Mean Score by Rating Gap</h2>
+            <p className="chart-takeaway">
+              Higher-rated teams generally achieve higher realised scores, but draws compress the relationship around the
+              middle of the scale.
+            </p>
             <p className="small" style={{ marginTop: "-8px", marginBottom: "12px" }}>
               Horizontal axis: pre-match rating gap (home minus away). Vertical axis: average outcome score (0–1 scale)
               compared with the model expectation and a reference curve. Optional overlay adds observed home-win rate on
@@ -1029,8 +1205,13 @@ function CalibrationPage({ navigate, data, loading, error }) {
 
           <div className="card">
             <h2>Empirical W/D/A Shares</h2>
-            <p className="small" style={{ marginTop: "-8px" }}>
-              Outcome frequencies within each rating-difference bin (home perspective).
+            <p className="chart-takeaway">
+              Home win, draw, and away win frequencies shift as the pre-match rating gap (home minus away) moves from
+              tight matches to heavy favourites.
+            </p>
+            <p className="small" style={{ marginTop: "-8px", marginBottom: "10px" }}>
+              Outcome frequencies within each rating-difference bin (home perspective). The horizontal axis is always home
+              rating minus away rating before kick-off.
             </p>
             <Plot data={calibrationPlots.rateData} layout={calibrationPlots.rateLayout} />
           </div>
@@ -1080,8 +1261,10 @@ function App() {
   const [latestRatingsRows, setLatestRatingsRows] = useState([]);
   /** Client reorder of top snapshot by Glicko rating only (server default is newest-week desc). */
   const [snapshotRatingSortDir, setSnapshotRatingSortDir] = useState("desc");
+  const [topTableSearch, setTopTableSearch] = useState("");
+  const [topTableCountry, setTopTableCountry] = useState("");
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const [clubDetail, setClubDetail] = useState(null);
@@ -1186,7 +1369,7 @@ function App() {
           }
         }
       } catch {
-        setError("We couldn't load the dashboard. Please refresh the page.");
+        setError("Unable to load ratings data. Please refresh or try again shortly.");
       } finally {
         setLoading(false);
       }
@@ -1356,6 +1539,27 @@ function App() {
     return rows;
   }, [topSnapshot, snapshotRatingSortDir]);
 
+  const topTableCountryOptions = useMemo(() => {
+    const set = new Set();
+    for (const row of latestRatingsRows) {
+      const c = String(row.country_name || "").trim();
+      if (c) set.add(c.toLowerCase());
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [latestRatingsRows]);
+
+  const displayedTopSnapshot = useMemo(() => {
+    let rows = sortedTopSnapshot;
+    const q = topTableSearch.trim().toLowerCase();
+    if (q) {
+      rows = rows.filter((r) => String(r.team_name || "").toLowerCase().includes(q));
+    }
+    if (topTableCountry) {
+      rows = rows.filter((r) => String(r.country_name || "").toLowerCase() === topTableCountry);
+    }
+    return rows;
+  }, [sortedTopSnapshot, topTableSearch, topTableCountry]);
+
   const toggleSnapshotRatingSort = useCallback(() => {
     setSnapshotRatingSortDir((d) => (d === "desc" ? "asc" : "desc"));
   }, []);
@@ -1385,6 +1589,13 @@ function App() {
     }
     return w;
   }, [countrySummaries]);
+
+  const latestWeekDateIso = useMemo(() => {
+    const hit = latestRatingsRows.find((row) => row.week_date);
+    return hit?.week_date ? String(hit.week_date) : null;
+  }, [latestRatingsRows]);
+
+  const latestWeekCaption = formatRatingWeekCaption(latestWeekId, latestWeekDateIso);
 
   const europeMedianBestClubRating = useMemo(
     () => medianNumeric(europeCountryLadder.rows.map((r) => r.rating)),
@@ -1750,6 +1961,7 @@ function App() {
               className="site-brand-mark"
               src="/marble-mark.svg"
               alt=""
+              aria-hidden="true"
               width={32}
               height={32}
               decoding="async"
@@ -1765,7 +1977,7 @@ function App() {
                 navigate("/");
               }}
             >
-              Map & Top 25
+              Explorer
             </a>
             <a
               className="link-btn link-btn--header"
@@ -1785,7 +1997,7 @@ function App() {
                 navigate("/diffused");
               }}
             >
-              Diffused
+              Diffused Strength
             </a>
             <a
               className="link-btn link-btn--header"
@@ -1795,7 +2007,7 @@ function App() {
                 navigate("/info");
               }}
             >
-              Info
+              Methodology
             </a>
           </nav>
         </div>
@@ -1831,7 +2043,7 @@ function App() {
                 navigate("/");
               }}
             >
-              ← Map & Rankings
+              ← Explorer
             </a>
             {clubCountrySlug ? (
               <a
@@ -2019,7 +2231,7 @@ function App() {
                 navigate("/");
               }}
             >
-              ← Map & Rankings
+              ← Explorer
             </a>
           </nav>
 
@@ -2123,31 +2335,87 @@ function App() {
         <>
           <header className="page-hero">
             <p className="sub-head">Ratings · European Clubs</p>
-            <h1>Ratings Dashboard</h1>
-            <p className="dashboard-card-subtle-lead">
-              Weekly Glicko strength across European leagues. Explore countries on the map; open the{" "}
-              <a
-                href="#/diffused"
-                onClick={(e) => {
-                  e.preventDefault();
-                  navigate("/diffused");
-                }}
-              >
-                Diffused
-              </a>{" "}
-              lens for schedule-comparability context.
+            <h1>European Club Ratings Explorer</h1>
+            <p className="dashboard-card-subtle-lead explorer-hero-lead">
+              Explore a cross-league football ratings model covering European clubs, countries, rating uncertainty, and
+              forecast quality.
+            </p>
+            <p className="small explorer-hero-tagline">
+              An interactive European football ratings model that compares clubs across domestic and continental
+              competitions, evaluates forecast quality, and exposes results through a deployed analytics product.
+            </p>
+            <p className="small explorer-hero-pipeline" style={{ marginBottom: 0 }}>
+              Built as an end-to-end personal analytics project: data ingestion → rating model → validation → API →
+              interactive frontend.
             </p>
           </header>
 
+          <div className="card project-overview-card">
+            <h2 className="project-overview-title">Project Overview</h2>
+            <ul className="small info-list project-overview-list">
+              <li>
+                <strong>What it is</strong> — a European club rating system using match results to estimate strength
+                across countries and competitions.
+              </li>
+              <li>
+                <strong>Why it exists</strong> — league tables stay inside their competitions; this explorer estimates a
+                cross-league view so schedules and opponent pools remain visible.
+              </li>
+              <li>
+                <strong>What keeps it honest</strong> — predictions are checked against historical outcomes and compared
+                with a simple Elo-style baseline on the calibration pages.
+              </li>
+              <li>
+                <strong>What the build demonstrates</strong> — ingestion, rating design, validation, interactive Plotly
+                analytics, and API plus frontend deployment as one coherent product.
+              </li>
+              <li>
+                <strong>Caveats</strong> — not a betting model; coverage gaps, squad churn, injuries, home-advantage
+                assumptions, competition mix, and schedule imbalance all affect estimates.
+              </li>
+            </ul>
+            <p className="small" style={{ marginBottom: 0 }}>
+              Need formulas or glossary entries? See{" "}
+              <a
+                href="#/info"
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate("/info");
+                }}
+              >
+                Methodology
+              </a>
+              .
+            </p>
+          </div>
+
+          {loading ? (
+            <div className="card card-muted loading-pulse branded-loading" aria-busy="true">
+              <p className="branded-loading-title" style={{ margin: "0 0 8px" }}>
+                Loading European Football Ratings…
+              </p>
+              <p className="small" style={{ margin: 0 }}>
+                Fetching latest club ratings and calibration-ready aggregates.
+              </p>
+            </div>
+          ) : null}
+
           <section className="dashboard-kpi-row" aria-label="Summary KPIs">
             <article className="dashboard-kpi-card">
-              <p className="dashboard-kpi-label">Latest week</p>
-              <p className="dashboard-kpi-value">
-                {latestWeekId != null ? `Week ${latestWeekId}` : loading ? "…" : "—"}
+              <p className="dashboard-kpi-label" title={WEEK_ID_FORMAT_HINT}>
+                Latest Week
+              </p>
+              <p className="dashboard-kpi-value" title={WEEK_ID_FORMAT_HINT}>
+                {!loading && latestWeekId == null ? "—" : loading ? "…" : latestWeekCaption}
               </p>
             </article>
             <article className="dashboard-kpi-card">
-              <p className="dashboard-kpi-label">Top country</p>
+              <p
+                className="dashboard-kpi-label"
+                title="Country whose highest-rated eligible club tops the European ladder (map shading uses the same rule)."
+              >
+                Strongest Club Country
+              </p>
               <p className="dashboard-kpi-value">
                 {europeCountryLadder.rows[0]
                   ? formatCountryDisplay(europeCountryLadder.rows[0].country_name)
@@ -2157,18 +2425,18 @@ function App() {
               </p>
             </article>
             <article className="dashboard-kpi-card">
-              <p className="dashboard-kpi-label">Top club</p>
+              <p className="dashboard-kpi-label">Top Club</p>
               <p className="dashboard-kpi-value dashboard-kpi-value--twoline">
                 <span className="dashboard-kpi-primary">{globalTopClubRow?.team_name ?? (loading ? "…" : "—")}</span>
                 {globalTopClubRow ? (
                   <span className="dashboard-kpi-secondary">
-                    {formatSnapshotStrengthCell(snapshotRawValue(globalTopClubRow))} rating
+                    {formatSnapshotStrengthCell(snapshotRawValue(globalTopClubRow))} Glicko rating
                   </span>
                 ) : null}
               </p>
             </article>
             <article className="dashboard-kpi-card">
-              <p className="dashboard-kpi-label">Countries rated</p>
+              <p className="dashboard-kpi-label">Countries Rated</p>
               <p className="dashboard-kpi-value">
                 {countrySummaries.length > 0 ? countrySummaries.length : loading ? "…" : "—"}
               </p>
@@ -2184,7 +2452,12 @@ function App() {
 
               <div className="dashboard-map-split">
                 <div className="dashboard-map-plot-col">
-                  <div ref={mapHostRef} className="dashboard-map-host">
+                  <div
+                    ref={mapHostRef}
+                    className="dashboard-map-host"
+                    role="application"
+                    aria-label="Interactive map of European club ratings by country. Click a country for details."
+                  >
                     <Plot mapChart data={mapData} layout={europeMapLayout} onClick={onMapPlotClick} />
                   </div>
                   <div className="map-custom-legend" aria-label="Map colour scale">
@@ -2214,8 +2487,10 @@ function App() {
                       <h3 className="dashboard-insight-title">Europe snapshot</h3>
                       <dl className="dashboard-insight-dl">
                         <div>
-                          <dt>Latest week</dt>
-                          <dd>{latestWeekId != null ? `Week ${latestWeekId}` : "—"}</dd>
+                          <dt title={WEEK_ID_FORMAT_HINT}>Latest week</dt>
+                          <dd title={WEEK_ID_FORMAT_HINT}>
+                            {loading ? "…" : latestWeekId != null ? latestWeekCaption : "—"}
+                          </dd>
                         </div>
                         <div>
                           <dt>Countries rated</dt>
@@ -2337,27 +2612,60 @@ function App() {
             </div>
           </section>
 
-          {loading && (
-            <div className="card card-muted loading-pulse" aria-busy="true">
-              <p style={{ margin: 0 }}>Loading ratings…</p>
-            </div>
-          )}
-
           <div className="card">
             <h2>Current Top 25</h2>
-            <p className="small" style={{ marginTop: "-8px", marginBottom: "14px" }}>
-              Latest rating week by <strong>Glicko rating</strong>. Only clubs with more than five matches in each of 2024,
-              2025, and 2026 appear here and on the map (see About). Rows are clickable — open a club&apos;s full history.
-              Click the rating header to flip ascending / descending (default matches server order).
+            <p className="small" style={{ marginTop: "-8px", marginBottom: "8px" }}>
+              <strong>Click a club</strong> to view rating history and match detail. Sort by{" "}
+              <strong>Glicko rating</strong> using the column control below (▼/▲ shows direction).
             </p>
+            <p className="small" style={{ marginBottom: "14px" }}>
+              Latest rating week only; eligibility filters apply (see Methodology). Week labels follow{" "}
+              <abbr title={WEEK_ID_FORMAT_HINT}>YYYYWW</abbr> with an optional week-ending date when provided by the
+              pipeline.
+            </p>
+            <div className="top-table-toolbar" role="group" aria-label="Filter top clubs table">
+              <label className="top-table-field">
+                <span className="top-table-field-label">Search clubs</span>
+                <input
+                  type="search"
+                  className="top-table-input"
+                  placeholder="Type to filter by club name"
+                  value={topTableSearch}
+                  onChange={(e) => setTopTableSearch(e.target.value)}
+                  autoComplete="off"
+                />
+              </label>
+              <label className="top-table-field">
+                <span className="top-table-field-label">Country</span>
+                <select
+                  className="top-table-select"
+                  value={topTableCountry}
+                  onChange={(e) => setTopTableCountry(e.target.value)}
+                  aria-label="Filter table by country"
+                >
+                  <option value="">All countries</option>
+                  {topTableCountryOptions.map((slug) => (
+                    <option key={slug} value={slug}>
+                      {formatCountryDisplay(slug)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
             <div className="table-scroll">
             {!loading && sortedTopSnapshot.length === 0 ? (
-              <p className="small" style={{ marginBottom: "12px" }}>
-                No clubs are listed right now — the table may still be updating, or filters may hide some sides.
-                Please try again in a moment.
+              <p className="small empty-state-msg" style={{ marginBottom: "12px" }}>
+                No rating data available for this selection.
               </p>
             ) : null}
-            <table>
+            {!loading &&
+            sortedTopSnapshot.length > 0 &&
+            displayedTopSnapshot.length === 0 ? (
+              <p className="small empty-state-msg" style={{ marginBottom: "12px" }}>
+                No clubs match your filters. Adjust search or country selection.
+              </p>
+            ) : null}
+            <table className="top-clubs-table">
               <thead>
                 <tr>
                   <th>#</th>
@@ -2370,7 +2678,8 @@ function App() {
                     <button
                       type="button"
                       className="th-sort-btn"
-                      title="Sort by Glicko rating"
+                      title="Glicko rating — mean strength estimate from Glicko-2. Sort ascending or descending."
+                      aria-label={`Sort by Glicko rating, currently ${snapshotRatingSortDir === "desc" ? "descending" : "ascending"}`}
                       onClick={(e) => {
                         e.stopPropagation();
                         toggleSnapshotRatingSort();
@@ -2382,17 +2691,23 @@ function App() {
                       </span>
                     </button>
                   </th>
-                  <th>{topSnapshot.some((r) => r.total_rd != null) ? "RD (total)" : "RD"}</th>
+                  <th title="Rating deviation — higher means more uncertainty around the rating estimate.">
+                    {topSnapshot.some((r) => r.total_rd != null) ? "RD (total)" : "RD"}
+                  </th>
+                  {/* TODO: add movement vs prior week when backend exposes previous-week ratings in snapshot payload */}
                 </tr>
               </thead>
               <tbody>
-                {sortedTopSnapshot.map((row, idx) => (
+                {displayedTopSnapshot.map((row) => {
+                  const ladderRank =
+                    sortedTopSnapshot.findIndex((r) => String(r.pid) === String(row.pid)) + 1;
+                  return (
                   <tr
                     key={row.pid}
                     className="click-row"
                     tabIndex={0}
                     role="button"
-                    aria-label={`Open ${row.team_name}, ranked ${idx + 1}`}
+                    aria-label={`Open ${row.team_name}, ranked ${ladderRank} of ${sortedTopSnapshot.length}`}
                     onClick={() => navigate(`/club/${row.pid}`)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
@@ -2402,14 +2717,15 @@ function App() {
                     }}
                   >
                     <td>
-                      <span className="rank-cell">{idx + 1}</span>
+                      <span className="rank-cell">{ladderRank}</span>
                     </td>
                     <td>{row.team_name}</td>
                     <td>{formatCountryDisplay(row.country_name)}</td>
                     <td className="rating-strong">{formatSnapshotStrengthCell(snapshotRawValue(row))}</td>
                     <td>{(row.total_rd != null ? Number(row.total_rd) : Number(row.rd)).toFixed(1)}</td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
             </div>
