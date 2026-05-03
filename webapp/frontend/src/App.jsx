@@ -2324,7 +2324,7 @@ function App() {
                         </a>
                         <button
                           type="button"
-                          className="link-btn dashboard-insight-clear"
+                          className="link-btn link-btn--primary"
                           onClick={() => setMapSelectedCountrySlug(null)}
                         >
                           Europe Overview
