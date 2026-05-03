@@ -48,6 +48,14 @@ DIST_INDEX = DIST_DIR / "index.html"
 INDEX_LEGACY = FRONTEND_DIR / "index.legacy.html"
 
 
+def _marble_mark_svg_path() -> Path | None:
+    """Favicon / header mark from Vite `public/` (copied to dist root); only `/assets` is mounted as static."""
+    for candidate in (DIST_DIR / "marble-mark.svg", FRONTEND_DIR / "public" / "marble-mark.svg"):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def _cors_allow_origins() -> list[str]:
     """Local dev hosts plus optional deployed origins via FOOTBALL_CORS_ORIGINS (comma-separated)."""
     raw = (os.environ.get("FOOTBALL_CORS_ORIGINS") or "").strip()
@@ -391,6 +399,18 @@ def biggest_matches(team_id: int, limit: int = Query(default=10, ge=1, le=50)) -
     if not result["upsets"] and not result["swings"]:
         raise HTTPException(status_code=404, detail="Team not found in match results data.")
     return result
+
+
+@app.get("/marble-mark.svg")
+def marble_mark_svg() -> FileResponse:
+    path = _marble_mark_svg_path()
+    if path is None:
+        raise HTTPException(status_code=404, detail="marble-mark.svg not found (build the frontend).")
+    return FileResponse(
+        path,
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 @app.get("/")

@@ -553,15 +553,11 @@ function DiffusedPage({ navigate }) {
           interpreting <em>how hard</em> a path looked — domestic-only vs heavy European minutes — is a separate
           question from the week-to-week Glicko step.
         </p>
-        <p className="small" style={{ marginBottom: "12px" }}>
+        <p className="small" style={{ marginBottom: 0 }}>
           The <strong>simple adjusted</strong> / comparability layer treats schedule exposure a bit like diffusion across
           contexts: strength estimates can be nudged toward anchors informed by who you played and where (with shrink when
           the signal is thin). It is a descriptive lens for cross-context storytelling, not a replacement for the Glicko
           update itself.
-        </p>
-        <p className="small" style={{ marginBottom: 0 }}>
-          When present in the dataset, those columns appear in CSV exports alongside μ. Heavier{" "}
-          <strong>GCAM</strong>-style connectivity and trust metrics stay export-side for diagnostics.
         </p>
       </div>
 
@@ -1781,7 +1777,14 @@ function App() {
               navigate("/");
             }}
           >
-            <span className="site-brand-mark" aria-hidden />
+            <img
+              className="site-brand-mark"
+              src="/marble-mark.svg"
+              alt=""
+              width={32}
+              height={32}
+              decoding="async"
+            />
             Football rankings
           </a>
           <nav className="site-nav" aria-label="Primary">

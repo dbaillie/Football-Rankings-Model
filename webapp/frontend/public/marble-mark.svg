@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-hidden="true">
+  <defs>
+    <radialGradient id="mSphere" cx="30%" cy="26%" r="72%">
+      <stop offset="0%" stop-color="#eaf4ff"/>
+      <stop offset="18%" stop-color="#93c5fd"/>
+      <stop offset="42%" stop-color="#3b82f6"/>
+      <stop offset="72%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </radialGradient>
+    <radialGradient id="mHighlight" cx="24%" cy="22%" r="38%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.85"/>
+      <stop offset="35%" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="mDepth" cx="72%" cy="74%" r="52%">
+      <stop offset="0%" stop-color="#020617" stop-opacity="0"/>
+      <stop offset="85%" stop-color="#020617" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#020617" stop-opacity="0.38"/>
+    </radialGradient>
+  </defs>
+  <circle cx="32" cy="32" r="28" fill="url(#mSphere)"/>
+  <circle cx="32" cy="32" r="28" fill="url(#mHighlight)"/>
+  <circle cx="32" cy="32" r="28" fill="url(#mDepth)"/>
+</svg>

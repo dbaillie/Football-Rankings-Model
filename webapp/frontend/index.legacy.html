@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0B1220" />
     <title>European Football Ratings</title>
+    <link rel="icon" href="/marble-mark.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -119,11 +120,13 @@
       }
 
       .site-brand-mark {
-        width: 10px;
-        height: 10px;
+        width: 32px;
+        height: 32px;
+        flex-shrink: 0;
+        display: block;
         border-radius: 50%;
-        background: linear-gradient(135deg, var(--primary-bright), var(--primary));
-        box-shadow: 0 0 16px rgba(96, 165, 250, 0.35);
+        object-fit: cover;
+        filter: drop-shadow(0 0 12px rgba(96, 165, 250, 0.42));
       }
 
       .site-nav {
