@@ -59,6 +59,18 @@ def _marble_mark_svg_path() -> Path | None:
     return None
 
 
+def _preview_png_path() -> Path | None:
+    """OG preview image from Vite ``public/preview.png`` (copied to ``dist/`` root at build time).
+
+    FastAPI does not mount the entire ``dist`` root — only ``/assets`` — so ``/preview.png`` needs an explicit route
+    for LinkedIn/Open Graph crawlers.
+    """
+    for candidate in (DIST_DIR / "preview.png", FRONTEND_DIR / "public" / "preview.png"):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def _cors_allow_origins() -> list[str]:
     """Local dev hosts plus optional deployed origins via FOOTBALL_CORS_ORIGINS (comma-separated)."""
     raw = (os.environ.get("FOOTBALL_CORS_ORIGINS") or "").strip()
@@ -412,6 +424,21 @@ def marble_mark_svg() -> FileResponse:
     return FileResponse(
         path,
         media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
+@app.get("/preview.png")
+def preview_png() -> FileResponse:
+    path = _preview_png_path()
+    if path is None:
+        raise HTTPException(
+            status_code=404,
+            detail="preview.png not found — add webapp/frontend/public/preview.png and rebuild.",
+        )
+    return FileResponse(
+        path,
+        media_type="image/png",
         headers={"Cache-Control": "public, max-age=86400"},
     )
 
