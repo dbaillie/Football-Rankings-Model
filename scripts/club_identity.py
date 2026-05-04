@@ -70,20 +70,40 @@ class ClubMatch:
     suggestion_score: float | None
 
 
-def suggest_club_match(name: str, dim_club: pd.DataFrame) -> tuple[str | None, float | None]:
-    choices = dim_club["club_name"].astype(str).tolist()
-    if not choices:
+def suggest_club_match(
+    name: str,
+    dim_club: pd.DataFrame,
+    league_country_id: int | None = None,
+) -> tuple[str | None, float | None]:
+    """
+    Rapidfuzz best dim ``club_name`` for ``name``.
+
+    When ``league_country_id`` is set (domestic leagues), search **that country's clubs first**
+    so e.g. ``Queens Park Rangers`` matches English ``QPR`` instead of Scottish ``Rangers``
+    (token_set_ratio scores 100 against ``Rangers``).
+    International / empty subset falls back to the full dim.
+    """
+
+    def _extract(subset: pd.DataFrame) -> tuple[str | None, float | None]:
+        choices = subset["club_name"].astype(str).tolist()
+        if not choices:
+            return None, None
+        result = process.extractOne(
+            name,
+            choices,
+            scorer=fuzz.token_set_ratio,
+            score_cutoff=FUZZY_SUGGESTION_THRESHOLD,
+        )
+        if result:
+            return result[0], float(result[1])
         return None, None
 
-    result = process.extractOne(
-        name,
-        choices,
-        scorer=fuzz.token_set_ratio,
-        score_cutoff=FUZZY_SUGGESTION_THRESHOLD,
-    )
-    if result:
-        return result[0], float(result[1])
-    return None, None
+    if league_country_id is not None and "country_id" in dim_club.columns:
+        sub = dim_club[dim_club["country_id"] == int(league_country_id)]
+        hit = _extract(sub)
+        if hit[0] is not None:
+            return hit
+    return _extract(dim_club)
 
 
 def build_club_lookup(dim_club: pd.DataFrame) -> dict[str, int]:
@@ -130,7 +150,7 @@ def resolve_or_create_club(
     suggestion_score: float | None = None
 
     if merge_on_fuzzy:
-        suggestion, suggestion_score = suggest_club_match(club_name, dim_club)
+        suggestion, suggestion_score = suggest_club_match(club_name, dim_club, league_country_id=country_id)
         if suggestion is not None and suggestion_score is not None:
             sugg_rows = dim_club[dim_club["club_name"].astype(str) == suggestion]
             if not sugg_rows.empty:

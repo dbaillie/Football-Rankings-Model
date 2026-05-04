@@ -11,9 +11,14 @@ The config file serves as the source of truth for:
 - League metadata (country, tier, competition type)
 - Season format for each league
 
-Supports incremental ingestion: the script can be run multiple times and will resume
-from where it left off, skipping already processed leagues. Progress is tracked in
-output/ingestion_progress.json.
+Supports incremental ingestion: when not filtering by calendar year, the script can
+resume per-league via output/ingestion_progress.json.
+
+By default, only finished matches whose kickoff falls in the **current UTC calendar
+year** are kept (older seasons are assumed already in ``fact_result_simple.csv``).
+Use ``--all-calendar-years`` for a full historical pull; use ``--match-calendar-year``
+for a specific year. When a calendar-year filter is active, league progress is ignored
+so every run refreshes that year's fixtures.
 
 Outputs
 -------
@@ -51,6 +56,7 @@ import argparse
 import json
 import logging
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -180,6 +186,56 @@ def is_finished_match(match: dict[str, Any]) -> bool:
     return True
 
 
+def sofascore_match_calendar_year_utc(match: dict[str, Any]) -> int | None:
+    """Calendar year of kickoff in UTC from SofaScore ``startTimestamp`` (unix seconds)."""
+    ts = safe_get(match, "startTimestamp")
+    if ts is None:
+        return None
+    try:
+        return int(pd.to_datetime(int(ts), unit="s", utc=True).year)
+    except Exception:
+        return None
+
+
+def _norm_year_token(tok: str) -> int:
+    t = str(tok).strip()
+    if not t.isdigit():
+        raise ValueError(t)
+    if len(t) == 2:
+        v = int(t)
+        return v + (2000 if v < 70 else 1900)
+    if len(t) == 4:
+        return int(t)
+    raise ValueError(t)
+
+
+def dim_season_calendar_year_overlap(dim_season_name: str, calendar_year: int) -> bool:
+    """
+    Heuristic: ``dim_season`` labels like ``2014/2015`` span calendar years from the
+    earlier year through the later (inclusive). Used to skip SofaScore/FBref pulls when
+    ``--match-calendar-year`` is set. Unknown shapes return True (safe: still pull).
+    """
+    s = str(dim_season_name).strip()
+    if "/" in s:
+        parts = [p.strip() for p in s.split("/") if p.strip()]
+        if len(parts) < 2:
+            return True
+        try:
+            y_lo = _norm_year_token(parts[0])
+            y_hi = _norm_year_token(parts[1])
+            lo, hi = min(y_lo, y_hi), max(y_lo, y_hi)
+            return lo <= int(calendar_year) <= hi
+        except ValueError:
+            return True
+    if s.isdigit() and len(s) == 4:
+        try:
+            y = int(s)
+            return abs(y - int(calendar_year)) <= 1
+        except ValueError:
+            pass
+    return True
+
+
 def season_name_to_id_map(dim_season: pd.DataFrame) -> dict[str, int]:
     return {
         str(row["season_name"]): int(row["season_id"])
@@ -279,6 +335,8 @@ def ingest_league(
     dim_country: pd.DataFrame,
     dim_season: pd.DataFrame,
     ss: Sofascore,
+    *,
+    match_calendar_year: int | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], pd.DataFrame, pd.DataFrame]:
     """
     Ingest a single league's matches.
@@ -340,7 +398,21 @@ def ingest_league(
         if converted_season and converted_season in season_map:
             seasons_to_pull.append((sofascore_season, converted_season))
 
-    logger.info("Matching seasons in dim_season: %d", len(seasons_to_pull))
+    if match_calendar_year is not None:
+        before = len(seasons_to_pull)
+        seasons_to_pull = [
+            pair
+            for pair in seasons_to_pull
+            if dim_season_calendar_year_overlap(pair[1], match_calendar_year)
+        ]
+        logger.info(
+            "Calendar year %s: kept %d/%d dim seasons (overlap heuristic; skipping dead seasons)",
+            match_calendar_year,
+            len(seasons_to_pull),
+            before,
+        )
+
+    logger.info("Matching seasons in dim_season (after filters): %d", len(seasons_to_pull))
 
     # Pull matches for each season
     for sofascore_season, dim_season_name in seasons_to_pull:
@@ -363,6 +435,10 @@ def ingest_league(
         for match in matches:
             if not is_finished_match(match):
                 continue
+            if match_calendar_year is not None:
+                cy = sofascore_match_calendar_year_utc(match)
+                if cy is None or cy != match_calendar_year:
+                    continue
             finished_count += 1
 
             home_name = safe_get(match, "homeTeam", "name")
@@ -542,7 +618,26 @@ def main() -> None:
     parser.add_argument("--dim-country", default="output/dim_country.csv", help="Path to dim_country.csv")
     parser.add_argument("--dim-season", default="output/dim_season.csv", help="Path to dim_season.csv")
     parser.add_argument("--outdir", default="output", help="Output folder")
+    parser.add_argument(
+        "--all-calendar-years",
+        action="store_true",
+        help="Include matches from every calendar year (disables default current-year-only filter).",
+    )
+    parser.add_argument(
+        "--match-calendar-year",
+        type=int,
+        metavar="YYYY",
+        default=None,
+        help="Only keep matches with kickoff in this UTC calendar year. Default when omitted: current UTC year (unless --all-calendar-years).",
+    )
     args = parser.parse_args()
+
+    if args.all_calendar_years:
+        match_calendar_year: int | None = None
+    elif args.match_calendar_year is not None:
+        match_calendar_year = args.match_calendar_year
+    else:
+        match_calendar_year = datetime.now(timezone.utc).year
 
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
@@ -555,7 +650,12 @@ def main() -> None:
         outdir,
     )
 
-    processed_leagues = load_progress(outdir)
+    processed_leagues = set() if match_calendar_year is not None else load_progress(outdir)
+    if match_calendar_year is not None:
+        logger.info(
+            "Match calendar year filter=%s (UTC): ignoring ingestion_progress.json so leagues are re-fetched",
+            match_calendar_year,
+        )
     existing_ingested_fact, existing_summary, existing_unmatched, existing_created = load_existing_outputs(outdir)
 
     ss = Sofascore()
@@ -585,6 +685,7 @@ def main() -> None:
                 dim_country=dim_country,
                 dim_season=dim_season,
                 ss=ss,
+                match_calendar_year=match_calendar_year,
             )
 
             all_fact_rows.extend(fact_rows)
@@ -619,10 +720,10 @@ def main() -> None:
             new_summary = pd.DataFrame([summary_rows[-1]])
             existing_summary = pd.concat([existing_summary, new_summary], ignore_index=True)
             existing_summary.to_csv(outdir / "ingestion_summary.csv", index=False)
-            
-            # Mark as processed
-            processed_leagues.add(league_code)
-            save_progress(outdir, processed_leagues)
+
+            if match_calendar_year is None:
+                processed_leagues.add(league_code)
+                save_progress(outdir, processed_leagues)
 
         except Exception as e:
             logger.error("Error processing league %s: %s", league_config["league_key"], e)

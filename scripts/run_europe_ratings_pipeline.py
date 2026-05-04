@@ -11,6 +11,7 @@ Examples:
   python scripts/run_europe_ratings_pipeline.py --skip-domestic --skip-euro
   python scripts/run_europe_ratings_pipeline.py --skip-future-fixtures
   python scripts/run_europe_ratings_pipeline.py --reset-euro --skip-domestic
+  python scripts/run_europe_ratings_pipeline.py --all-calendar-years   # full-history ingest (not default)
 """
 
 from __future__ import annotations
@@ -93,6 +94,18 @@ def main() -> None:
         action="store_true",
         help="Skip ingest_future_fixtures.py (writes output/fact_fixture_upcoming.csv)",
     )
+    parser.add_argument(
+        "--all-calendar-years",
+        action="store_true",
+        help="Forward to ingest steps: include every calendar year (not only current UTC year).",
+    )
+    parser.add_argument(
+        "--match-calendar-year",
+        type=int,
+        default=None,
+        metavar="YYYY",
+        help="Forward to ingest steps: only matches with kickoff in this UTC calendar year.",
+    )
     args = parser.parse_args()
 
     outdir = _repo_path(args.outdir)
@@ -103,6 +116,12 @@ def main() -> None:
 
     py = sys.executable
     scripts_dir = REPO_ROOT / "scripts"
+
+    ingest_calendar_flags: list[str] = []
+    if args.all_calendar_years:
+        ingest_calendar_flags.append("--all-calendar-years")
+    elif args.match_calendar_year is not None:
+        ingest_calendar_flags.extend(["--match-calendar-year", str(args.match_calendar_year)])
 
     if args.reset_euro and not args.skip_euro:
         _run(
@@ -126,6 +145,7 @@ def main() -> None:
                 str(dim_country),
                 "--dim-season",
                 str(dim_season),
+                *ingest_calendar_flags,
             ],
             cwd=REPO_ROOT,
             dry_run=args.dry_run,
@@ -148,6 +168,7 @@ def main() -> None:
                 str(dim_season),
                 "--provider",
                 args.euro_provider,
+                *ingest_calendar_flags,
             ],
             cwd=REPO_ROOT,
             dry_run=args.dry_run,

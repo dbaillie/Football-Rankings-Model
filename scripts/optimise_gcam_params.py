@@ -88,9 +88,19 @@ def _filter_last_distinct_weeks(df: pd.DataFrame, last_weeks: int | None) -> pd.
     return df.loc[wk.isin(keep)].copy()
 
 
+def _weekly_ratings_path(euro: Path) -> Path:
+    c = euro / "europe_weekly_ratings.csv"
+    if c.is_file():
+        return c
+    t = euro / "europe_weekly_ratings.txt"
+    if t.is_file():
+        return t
+    return c
+
+
 def _load_inputs(output_root: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     euro = output_root / "europe"
-    weekly_path = euro / "europe_weekly_ratings.csv"
+    weekly_path = _weekly_ratings_path(euro)
     match_path = euro / "europe_match_results.csv"
     pred_path = euro / "europe_predictions.csv"
     for p in (weekly_path, match_path, pred_path):

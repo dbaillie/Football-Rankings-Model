@@ -25,6 +25,17 @@ ANALYTICAL_START_WEEK = 200531
 ANALYTICAL_START_DATE = pd.Timestamp("2005-07-01")
 
 
+def _weekly_ratings_csv_path() -> Path:
+    """Prefer ``europe_weekly_ratings.csv``; fall back to ``europe_weekly_ratings.txt``."""
+    c = OUTPUT_DIR / "europe_weekly_ratings.csv"
+    if c.is_file():
+        return c
+    t = OUTPUT_DIR / "europe_weekly_ratings.txt"
+    if t.is_file():
+        return t
+    return c
+
+
 def _use_database() -> bool:
     """When True, heavy tables are read from Postgres (DATABASE_URL) instead of CSV files."""
     try:
@@ -193,7 +204,11 @@ def load_teams() -> pd.DataFrame:
 
 
 def _finalize_weekly_ratings_frame(weekly: pd.DataFrame) -> pd.DataFrame:
-    """Shared cleanup after load (full or chunked)."""
+    """Normalize dtypes/columns after CSV or DB load.
+
+    Drops rows with ``week`` below ``ANALYTICAL_START_WEEK`` (warm-up weeks are not shipped in
+    ``europe_weekly_ratings.csv`` / ``fr_weekly_ratings``). No other row cap here.
+    """
     if weekly.empty:
         return weekly
     weekly["week"] = weekly["week"].astype(int)
@@ -208,6 +223,15 @@ def _finalize_weekly_ratings_frame(weekly: pd.DataFrame) -> pd.DataFrame:
 
 @lru_cache(maxsize=1)
 def load_weekly_ratings() -> pd.DataFrame:
+    """All weekly rating snapshots used by the API (charts, snapshots, club series).
+
+    **Full analytical history** is loaded when ``FOOTBALL_LOAD_LAST_CALENDAR_YEARS`` is **unset**
+    (default): every row in ``fr_weekly_ratings`` / ``europe_weekly_ratings.csv`` (or ``.txt``) from the pipeline,
+    subject only to ``week >= ANALYTICAL_START_WEEK`` in :func:`_finalize_weekly_ratings_frame`.
+
+    If ``FOOTBALL_LOAD_LAST_CALENDAR_YEARS=N`` is set, only the last *N* ISO-ish calendar years
+    of ``week`` ids are kept (memory saver on small hosts).
+    """
     if _use_database():
         from sqlalchemy import text
 
@@ -235,7 +259,7 @@ def load_weekly_ratings() -> pd.DataFrame:
             )
         return _finalize_weekly_ratings_frame(weekly)
 
-    path = OUTPUT_DIR / "europe_weekly_ratings.csv"
+    path = _weekly_ratings_csv_path()
     dtype_kw = {"dtype": {"country_name": "string", "team_name": "string"}, "low_memory": False}
     min_cal_year = _min_calendar_year_for_recent_load()
 

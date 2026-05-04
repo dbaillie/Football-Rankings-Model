@@ -4,11 +4,12 @@ Load `output/europe` CSV exports into Postgres tables used when DATABASE_URL is 
 
 Tables (prefix fr_ = football ratings):
   fr_teams              <- europe_teams.csv
-  fr_weekly_ratings     <- europe_weekly_ratings.csv (chunked)
+  fr_weekly_ratings     <- europe_weekly_ratings.csv (or .txt; chunked)
   fr_match_results      <- europe_match_results.csv (chunked)
   fr_europe_ratings     <- europe_ratings.csv
 
-Requires DATABASE_URL (e.g. Supabase session pooler connection string).
+Requires DATABASE_URL. Prefer Supabase **Session pooler** URI (`*.pooler.supabase.com`) if direct
+`db.<project>.supabase.co` fails DNS from Python on Windows.
 
 Example:
 
@@ -24,11 +25,14 @@ Optional:
 from __future__ import annotations
 
 import os
+import socket
 import sys
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.pool import NullPool
 
 
@@ -43,19 +47,105 @@ def _europe_dir() -> Path:
     return _repo_root() / "output" / "europe"
 
 
-def main() -> int:
-    root = _repo_root()
+def _resolve_weekly_ratings_path(europe: Path) -> Path:
+    """Prefer ``europe_weekly_ratings.csv``; accept ``.txt`` (e.g. Excel save-as)."""
+    csv_p = europe / "europe_weekly_ratings.csv"
+    if csv_p.is_file():
+        return csv_p
+    txt_p = europe / "europe_weekly_ratings.txt"
+    if txt_p.is_file():
+        return txt_p
+    return csv_p
+
+
+def _postgresql_host_port(database_url: str) -> tuple[str | None, int]:
+    u = database_url.strip()
+    for prefix in ("postgresql+psycopg2://", "postgres://"):
+        if u.startswith(prefix):
+            u = "postgresql://" + u[len(prefix) :]
+            break
+    parsed = urlparse(u)
+    port = parsed.port or 5432
+    return parsed.hostname, port
+
+
+def _print_dns_lookup_hints(host: str | None) -> None:
+    print(
+        "\n"
+        "Hostname lookup failed from Python/psycopg2 (libpq). On Windows, nslookup can still succeed\n"
+        "because it uses a different resolver path than Python — especially with IPv6-only DB hosts.\n",
+        file=sys.stderr,
+        flush=True,
+    )
+    print(
+        "What usually fixes it:\n"
+        "  • Supabase → Project Settings → Database → Connection string:\n"
+        "    choose Session pooler (URI host is often aws-0-….pooler.supabase.com or similar).\n"
+        "    Paste that into DATABASE_URL — avoid raw db.<ref>.supabase.co if Python DNS fails.\n"
+        "  • Quick check:  python -c \"import socket; "
+        "print(socket.getaddrinfo('YOUR_HOST', 5432))\"\n",
+        file=sys.stderr,
+        flush=True,
+    )
+    if host:
+        print(f"  • Your URL host was: {host}\n", file=sys.stderr, flush=True)
+    print(
+        "  • Toggle VPN off, try another network/DNS (1.1.1.1 / 8.8.8.8), or confirm IPv6 routing.\n",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
+def _load_repo_dotenv(repo_root: Path) -> None:
+    """Load repo-root `.env` into os.environ (DATABASE_URL etc.)."""
+    path = repo_root / ".env"
+    if not path.is_file():
+        return
     try:
         from dotenv import load_dotenv
 
-        load_dotenv(root / ".env")
+        load_dotenv(path)
+        return
     except ImportError:
-        pass
+        print(
+            "WARNING: python-dotenv is not installed — using a minimal .env parser.\n"
+            "  Install for full compatibility: pip install python-dotenv",
+            file=sys.stderr,
+            flush=True,
+        )
+    # Fallback: KEY=VALUE lines only (utf-8-sig strips BOM on first line).
+    try:
+        text = path.read_text(encoding="utf-8-sig")
+    except OSError:
+        return
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].strip()
+        if "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        key = key.strip()
+        val = val.strip()
+        if len(val) >= 2 and val[0] == val[-1] and val[0] in "\"'":
+            val = val[1:-1]
+        if key:
+            os.environ.setdefault(key, val)
+
+
+def main() -> int:
+    root = _repo_root()
+    _load_repo_dotenv(root)
 
     url = os.environ.get("DATABASE_URL", "").strip()
     if not url:
+        expected = root / ".env"
         print(
-            "ERROR: DATABASE_URL is not set. Add it to .env at the repo root or export it in your shell.",
+            "ERROR: DATABASE_URL is not set.\n"
+            f"  Expected repo-root .env at: {expected}\n"
+            "  Add DATABASE_URL=postgresql://... there, or export DATABASE_URL in your shell.",
             file=sys.stderr,
         )
         return 1
@@ -74,24 +164,51 @@ def main() -> int:
         url,
         poolclass=NullPool,
         pool_pre_ping=True,
-        connect_args={"connect_timeout": 60},
+        connect_args={
+            "connect_timeout": 60,
+            "client_encoding": "utf8",
+        },
     )
 
     teams_path = europe / "europe_teams.csv"
-    weekly_path = europe / "europe_weekly_ratings.csv"
+    weekly_path = _resolve_weekly_ratings_path(europe)
     matches_path = europe / "europe_match_results.csv"
     ratings_path = europe / "europe_ratings.csv"
 
-    for p in (teams_path, weekly_path, matches_path, ratings_path):
+    for p in (teams_path, matches_path, ratings_path):
         if not p.is_file():
             print(f"ERROR: missing {p}", file=sys.stderr)
             return 1
+    if not weekly_path.is_file():
+        print(
+            "ERROR: missing europe_weekly_ratings.csv or europe_weekly_ratings.txt under:\n"
+            f"  {europe}",
+            file=sys.stderr,
+        )
+        return 1
 
     # --- teams (small — avoid method='multi' first insert quirks on some remote hosts) ---
     t0 = time.monotonic()
     print("Postgres: connecting (first contact can take 30–120s on slow networks)…", flush=True)
-    with engine.begin() as conn:
-        conn.execute(text("SELECT 1"))
+    host, port = _postgresql_host_port(url)
+    if host:
+        try:
+            socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+        except OSError as dns_exc:
+            print(
+                f"WARNING: Python cannot resolve {host!r}:{port} ({dns_exc}). "
+                "Import will likely fail — try Session pooler URI from Supabase.",
+                file=sys.stderr,
+                flush=True,
+            )
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("SELECT 1"))
+    except OperationalError as exc:
+        orig_msg = str(getattr(exc, "orig", exc) or exc).lower()
+        if "could not translate host name" in orig_msg or "name or service not known" in orig_msg:
+            _print_dns_lookup_hints(host)
+        raise
     print(f"Postgres: OK ({time.monotonic() - t0:.1f}s)", flush=True)
 
     print(f"Reading {teams_path.name}…", flush=True)
@@ -132,7 +249,10 @@ def main() -> int:
         total_w += len(chunk)
         first = False
         print(f"  fr_weekly_ratings chunk {chunk_i}: {total_w:,} cumulative rows", flush=True)
-    print(f"fr_weekly_ratings: {total_w:,} rows total", flush=True)
+    print(
+        f"fr_weekly_ratings: {total_w:,} rows total (matches CSV — full weekly history if export was full)",
+        flush=True,
+    )
 
     # --- matches ---
     print("fr_match_results: starting…", flush=True)

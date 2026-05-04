@@ -2,17 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import os
+from pathlib import Path
 
 try:
     from dotenv import load_dotenv as _load_dotenv
 except ImportError:
-    def _load_dotenv() -> None:  # pragma: no cover
+    def _load_dotenv(_path=None) -> None:  # pragma: no cover
         return None
 
 
-_load_dotenv()
+# Repo-root .env (not cwd — Uvicorn/IDE often start with cwd elsewhere).
+_ENV_REPO_ROOT = Path(__file__).resolve().parents[2] / ".env"
+_load_dotenv(_ENV_REPO_ROOT)
+_load_dotenv()  # optional overrides from cwd
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from pydantic import BaseModel, EmailStr, Field
 

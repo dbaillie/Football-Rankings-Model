@@ -24,7 +24,7 @@ import sys
 
 # Import the Glicko engine and GCAM post-hoc layer
 sys.path.append("libs")
-from glicko_engine.core import run_glicko2, GLICKO2_SCALE, weeks_between
+from glicko_engine.core import run_glicko2, GLICKO2_SCALE
 from glicko_engine.outputs import state_to_ratings_df, snapshots_to_df
 from gcam.config import GCAMConfig
 from gcam.football import fact_table_to_weighted_matches
@@ -36,8 +36,8 @@ from gcam.simple import GCAMSimplifiedConfig, run_simple_comparability
 ANALYTICAL_START_WEEK = 200531
 # Safety date boundary for 05/06 season start (prevents any calendar/week conversion leakage).
 ANALYTICAL_START_DATE = pd.Timestamp("2005-07-01")
-# If a team is absent this long, treat return as a new entrant and drop prior history segment.
-RESET_AFTER_INACTIVE_WEEKS = 104
+# If a team is absent this long (ISO weeks), treat return as a new entrant in-engine (~10 years).
+RESET_AFTER_INACTIVE_WEEKS = 520
 UEFA_LEAGUE_CODES = frozenset({"UCL", "UEL", "UECL", "EURO"})
 
 GCAM_MERGE_INTO_FINAL = (
@@ -84,7 +84,8 @@ def load_europe_data(output_root: Path):
     resolved_fact = output_root / "fact_result_simple_resolved.csv"
     # Load the processed data
     fact_df = pd.read_csv(resolved_fact)
-    clubs_df = pd.read_csv(output_root / "dim_club_updated.csv")
+    dim_up = output_root / "dim_club_updated.csv"
+    clubs_df = pd.read_csv(dim_up if dim_up.is_file() else output_root / "dim_club.csv")
 
     # Drop rows with missing club IDs or goals
     fact_df = fact_df.dropna(subset=['home_club_id', 'away_club_id', 'home_team_goals', 'away_team_goals'])
@@ -143,7 +144,8 @@ def load_europe_data(output_root: Path):
     ])
 
     # Add country info from clubs
-    country_df = pd.read_csv(output_root / "dim_country_updated.csv")
+    c_up = output_root / "dim_country_updated.csv"
+    country_df = pd.read_csv(c_up if c_up.is_file() else output_root / "dim_country.csv")
     country_id_to_name = dict(zip(country_df['country_id'], country_df['country_name']))
     team_info['country_name'] = team_info['country_id'].map(country_id_to_name)
 
@@ -180,9 +182,10 @@ def create_config(europe_output_dir: Path):
         },
         "window": {
             "last_week": 202652,  # Future week to include all data
-            "run_last_n_weeks": 520,  # About 10 years
+            # Used only by batch loaders (prepare_inputs); Europe runner passes all analytical weeks inline.
+            "run_last_n_weeks": 5000,
             "analytical_start_week": ANALYTICAL_START_WEEK,
-            "use_last_week_rank_filter": False
+            "use_last_week_rank_filter": False,
         },
         "seeding": {
             "seed_from_rankings": False
@@ -223,45 +226,17 @@ def glicko_run_kwargs(config: dict) -> dict:
     }
 
 
-def trim_history_after_long_absence(weekly_ratings: pd.DataFrame) -> pd.DataFrame:
-    """
-    Keep only the latest continuous history segment per team.
-    A new segment starts when the team is absent for >= RESET_AFTER_INACTIVE_WEEKS.
-    """
-    if weekly_ratings.empty:
-        return weekly_ratings
-
-    cleaned_parts = []
-    for pid, grp in weekly_ratings.sort_values(["pid", "week"]).groupby("pid", sort=False):
-        grp = grp.copy()
-        weeks = grp["week"].astype(int).tolist()
-        segment_ids = []
-        current_segment = 0
-        previous_week = None
-
-        for wk in weeks:
-            if previous_week is not None:
-                gap = weeks_between(previous_week, wk)
-                if gap >= RESET_AFTER_INACTIVE_WEEKS:
-                    current_segment += 1
-            segment_ids.append(current_segment)
-            previous_week = wk
-
-        grp["history_segment"] = segment_ids
-        latest_segment = int(grp["history_segment"].max())
-        cleaned_parts.append(grp[grp["history_segment"] == latest_segment].drop(columns=["history_segment"]))
-
-    return pd.concat(cleaned_parts, ignore_index=True)
-
-
 def run_data_model(output_root: Path):
     """Ensure prerequisite data exists before running Europe ratings."""
     fact_file = output_root / "fact_result_simple_resolved.csv"
-    clubs_file = output_root / "dim_club.csv"
+    clubs_updated = output_root / "dim_club_updated.csv"
+    clubs_base = output_root / "dim_club.csv"
+    clubs_ok = clubs_updated.exists() or clubs_base.exists()
 
-    if not fact_file.exists() or not clubs_file.exists():
+    if not fact_file.exists() or not clubs_ok:
         raise FileNotFoundError(
-            f"Missing prerequisite files. Expected {fact_file} and {clubs_file}. "
+            f"Missing prerequisite files. Expected {fact_file} and either "
+            f"{clubs_updated} or {clubs_base}. "
             "Run pipeline first: create_data_model.py -> ingest_leagues_from_config.py -> resolve_club_identities.py --write"
         )
     else:
@@ -455,10 +430,6 @@ def main():
         weekly_ratings = weekly_ratings.sort_values(['team_name', 'week']).reset_index(drop=True)
         weekly_ratings['rating_change'] = weekly_ratings.groupby('pid')['rating'].diff().fillna(0.0)
         weekly_ratings['rating_change_pct'] = weekly_ratings.groupby('pid')['rating'].pct_change().fillna(0.0)
-        weekly_ratings = trim_history_after_long_absence(weekly_ratings)
-        weekly_ratings = weekly_ratings.sort_values(['team_name', 'week']).reset_index(drop=True)
-        weekly_ratings['rating_change'] = weekly_ratings.groupby('pid')['rating'].diff().fillna(0.0)
-        weekly_ratings['rating_change_pct'] = weekly_ratings.groupby('pid')['rating'].pct_change().fillna(0.0)
 
         # Create detailed match results with pre/post ratings
         print("\nCreating detailed match results...")
@@ -642,6 +613,14 @@ def main():
         # Save results
         final_ratings.to_csv(output_dir / "europe_ratings.csv", index=False)
         pred_df.to_csv(output_dir / "europe_predictions.csv", index=False)
+        # Full analytical span: one row per (pid, week) from Glicko snapshots (week >= ANALYTICAL_START_WEEK).
+        # Import scripts load this file verbatim into fr_weekly_ratings; do not slim here if you want API charts
+        # to show full history (use slim_europe_for_web_deploy.py only when you intentionally truncate CSVs).
+        wk_series = weekly_ratings["week"].astype(int)
+        print(
+            f"  europe_weekly_ratings.csv: {len(weekly_ratings):,} rows, "
+            f"rating weeks {int(wk_series.min())}–{int(wk_series.max())} (full analytical grid)"
+        )
         weekly_ratings.to_csv(output_dir / "europe_weekly_ratings.csv", index=False)
         results_df.to_csv(output_dir / "europe_match_results.csv", index=False)
         

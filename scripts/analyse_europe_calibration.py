@@ -248,6 +248,10 @@ def main() -> None:
     pred_path = euro / "europe_predictions.csv"
     match_path = euro / "europe_match_results.csv"
     weekly_path = euro / "europe_weekly_ratings.csv"
+    if not weekly_path.is_file():
+        wt = euro / "europe_weekly_ratings.txt"
+        if wt.is_file():
+            weekly_path = wt
 
     if not pred_path.exists():
         print(f"Missing {pred_path}. Run scripts/run_glicko_europe.py first.", file=sys.stderr)
@@ -258,7 +262,7 @@ def main() -> None:
 
     pred = pd.read_csv(pred_path)
     mat = pd.read_csv(match_path)
-    weekly = pd.read_csv(weekly_path) if weekly_path.exists() else pd.DataFrame()
+    weekly = pd.read_csv(weekly_path) if weekly_path.is_file() else pd.DataFrame()
 
     required_p = {"week", "PlayerA", "PlayerB", "actual_scoreA", "pred_pA"}
     required_m = {"week", "home_team_id", "away_team_id", "home_pre_rating", "away_pre_rating", "result"}

@@ -6,6 +6,10 @@ UEFA-only ingest path with pluggable providers.
 Providers:
 - sofascore (existing ScraperFC path)
 - football_data_org (alternate API path; requires token)
+
+By default only matches whose kickoff falls in the current UTC calendar year are kept;
+use ``--all-calendar-years`` or ``--match-calendar-year YYYY`` like domestic ingest.
+When a calendar-year filter is active, euro league progress is ignored and not written.
 """
 
 from __future__ import annotations
@@ -14,7 +18,7 @@ import argparse
 import json
 import os
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 import sys
 
 import pandas as pd
@@ -70,6 +74,39 @@ def season_name_from_date(match_date: datetime, season_format: str) -> str:
     return f"{start_year}/{start_year + 1}"
 
 
+def football_data_org_fetch_finished_matches(
+    comp_code: str,
+    token: str,
+    *,
+    match_calendar_year: int | None,
+) -> list[dict]:
+    """Paginated FINISHED matches; optional ``dateFrom``/``dateTo`` for one UTC calendar year."""
+    headers = {"X-Auth-Token": token}
+    base_url = f"https://api.football-data.org/v4/competitions/{comp_code}/matches"
+    params: dict[str, str] = {"status": "FINISHED"}
+    if match_calendar_year is not None:
+        params["dateFrom"] = f"{match_calendar_year}-01-01"
+        params["dateTo"] = f"{match_calendar_year}-12-31"
+
+    matches: list[dict] = []
+    url: str | None = base_url
+    first = True
+    while url:
+        if first:
+            response = requests.get(url, headers=headers, params=params, timeout=120)
+            first = False
+        else:
+            response = requests.get(url, headers=headers, timeout=120)
+        if response.status_code != 200:
+            raise RuntimeError(f"football-data.org HTTP {response.status_code}: {response.text[:200]}")
+        payload = response.json()
+        matches.extend(payload.get("matches", []))
+        nxt = (payload.get("_links") or {}).get("next")
+        href = (nxt or {}).get("href") if isinstance(nxt, dict) else None
+        url = href.strip() if isinstance(href, str) and href.strip() else None
+    return matches
+
+
 def ingest_league_football_data_org(
     league_config: dict,
     fact: pd.DataFrame,
@@ -77,6 +114,8 @@ def ingest_league_football_data_org(
     dim_country: pd.DataFrame,
     dim_season: pd.DataFrame,
     token: str,
+    *,
+    match_calendar_year: int | None = None,
 ) -> tuple[list[dict], list[dict], list[dict], pd.DataFrame, pd.DataFrame]:
     league_code = league_config["league_key"]
     country_name = league_config["country"]
@@ -106,12 +145,7 @@ def ingest_league_football_data_org(
     next_result_id = int(fact["result_id"].max()) + 1 if len(fact) > 0 else 1
     next_club_id = int(dim_club["club_id"].max()) + 1 if len(dim_club) > 0 else 1
 
-    url = f"https://api.football-data.org/v4/competitions/{comp_code}/matches?status=FINISHED"
-    response = requests.get(url, headers={"X-Auth-Token": token}, timeout=60)
-    if response.status_code != 200:
-        raise RuntimeError(f"football-data.org HTTP {response.status_code}: {response.text[:200]}")
-    payload = response.json()
-    matches = payload.get("matches", [])
+    matches = football_data_org_fetch_finished_matches(comp_code, token, match_calendar_year=match_calendar_year)
 
     new_fact_rows: list[dict] = []
     unmatched_rows: list[dict] = []
@@ -123,6 +157,8 @@ def ingest_league_football_data_org(
             continue
         match_dt = pd.to_datetime(utc_date, utc=True, errors="coerce")
         if pd.isna(match_dt):
+            continue
+        if match_calendar_year is not None and int(match_dt.year) != match_calendar_year:
             continue
 
         season_name = season_name_from_date(match_dt.to_pydatetime(), season_format=season_format)
@@ -231,7 +267,26 @@ def main() -> None:
         choices=["sofascore", "football_data_org"],
         help="UEFA ingest provider",
     )
+    parser.add_argument(
+        "--all-calendar-years",
+        action="store_true",
+        help="Include matches from every calendar year (disables default current-year-only filter).",
+    )
+    parser.add_argument(
+        "--match-calendar-year",
+        type=int,
+        metavar="YYYY",
+        default=None,
+        help="Only keep matches in this UTC calendar year. Default: current UTC year unless --all-calendar-years.",
+    )
     args = parser.parse_args()
+
+    if args.all_calendar_years:
+        match_calendar_year = None
+    elif args.match_calendar_year is not None:
+        match_calendar_year = args.match_calendar_year
+    else:
+        match_calendar_year = datetime.now(timezone.utc).year
 
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
@@ -244,7 +299,12 @@ def main() -> None:
         outdir,
     )
 
-    processed_leagues = load_progress(outdir)
+    processed_leagues = set() if match_calendar_year is not None else load_progress(outdir)
+    if match_calendar_year is not None:
+        logger.info(
+            "Match calendar year filter=%s (UTC): ignoring ingestion_progress_euro.json",
+            match_calendar_year,
+        )
     existing_ingested_fact = _safe_read_csv(outdir / "fact_result_simple_ingested_euro.csv")
     existing_summary = _safe_read_csv(outdir / "ingestion_summary_euro.csv")
     existing_unmatched = _safe_read_csv(outdir / "unmatched_clubs_euro.csv")
@@ -273,6 +333,7 @@ def main() -> None:
                     dim_country=dim_country,
                     dim_season=dim_season,
                     ss=ss,
+                    match_calendar_year=match_calendar_year,
                 )
             else:
                 fact_rows, unmatched, created, dim_club, dim_country = ingest_league_football_data_org(
@@ -282,6 +343,7 @@ def main() -> None:
                     dim_country=dim_country,
                     dim_season=dim_season,
                     token=fd_token,
+                    match_calendar_year=match_calendar_year,
                 )
 
             all_fact_rows.extend(fact_rows)
@@ -312,8 +374,9 @@ def main() -> None:
             existing_summary = pd.concat([existing_summary, row], ignore_index=True)
             existing_summary.to_csv(outdir / "ingestion_summary_euro.csv", index=False)
 
-            processed_leagues.add(league_code)
-            save_progress(outdir, processed_leagues)
+            if match_calendar_year is None:
+                processed_leagues.add(league_code)
+                save_progress(outdir, processed_leagues)
         except Exception as exc:
             row = pd.DataFrame(
                 [

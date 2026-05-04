@@ -34,6 +34,7 @@ def get_engine() -> Engine:
             pool_size=5,
             max_overflow=10,
             pool_reset_on_return="rollback",
+            connect_args={"client_encoding": "utf8"},
         )
     return _engine
 

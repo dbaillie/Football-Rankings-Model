@@ -33,6 +33,8 @@ _SHORT_FORM_TO_CANONICAL: dict[str, str] = {
     "paris sg fc": "paris sg",
     "bayer 04 leverkusen": "leverkusen",
     "1 koln": "koln",
+    # Queens Park Rangers (London, ENG2) vs Rangers FC (Glasgow); substring would fuzzy-match wrong.
+    "queens park rangers": "qpr",
     # Football-data / historic abbrev vs full club name (same team).
     "nottm forest": "nottingham forest",
     "nottingham forrest": "nottingham forest",

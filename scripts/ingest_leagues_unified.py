@@ -15,6 +15,10 @@ https://scraperfc.readthedocs.io/en/latest/fbref.html ):
 ``--european-provider scraperfc`` applies ``--backend`` to UCL/UEL/UECL/EURO the same way as domestically.
 ``--european-provider football_data_org`` uses the REST API (``FOOTBALL_DATA_API_TOKEN``).
 
+By default only matches whose kickoff falls in the **current UTC calendar year** are kept; use
+``--all-calendar-years`` for full history or ``--match-calendar-year YYYY`` for one year.
+When that filter is active, league progress files are ignored and not updated.
+
 Examples:
   python scripts/ingest_leagues_unified.py
   python scripts/ingest_leagues_unified.py --skip-domestic
@@ -27,6 +31,7 @@ from __future__ import annotations
 import argparse
 import os
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +62,7 @@ from scripts.ingest_euro_comps_from_config import (  # noqa: E402
 from scripts.ingest_leagues_from_config import (  # noqa: E402
     CREATE_MISSING_CLUBS,
     DOMESTIC_COMPETITION_TYPES,
+    dim_season_calendar_year_overlap,
     ingest_league,
     load_dims,
     load_existing_outputs,
@@ -201,6 +207,8 @@ def ingest_league_fbref(
     dim_country: pd.DataFrame,
     dim_season: pd.DataFrame,
     fb: FBref,
+    *,
+    match_calendar_year: int | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], pd.DataFrame, pd.DataFrame]:
     from scripts.club_identity import build_club_lookup, resolve_or_create_club
 
@@ -245,6 +253,19 @@ def ingest_league_fbref(
         return new_fact_rows, unmatched_rows, created_rows, dim_club, dim_country
 
     seasons_to_pull = pair_fbref_years_to_dim(list(fb_valid.keys()), season_map)
+    if match_calendar_year is not None:
+        before = len(seasons_to_pull)
+        seasons_to_pull = [
+            pair
+            for pair in seasons_to_pull
+            if dim_season_calendar_year_overlap(pair[1], match_calendar_year)
+        ]
+        logger.info(
+            "FBref calendar year %s: kept %d/%d seasons (dim overlap heuristic)",
+            match_calendar_year,
+            len(seasons_to_pull),
+            before,
+        )
     logger.info("FBref seasons matched to dim_season: %d", len(seasons_to_pull))
 
     for fb_year, dim_season_name in seasons_to_pull:
@@ -262,6 +283,15 @@ def ingest_league_fbref(
 
         logger.info("FBref: got %d match records", len(matches))
         for m in matches:
+            try:
+                md = pd.to_datetime(m.date, errors="coerce")
+                if pd.isna(md):
+                    continue
+                if match_calendar_year is not None and int(md.year) != match_calendar_year:
+                    continue
+            except Exception:
+                continue
+
             home_nm = str(m.home_team).strip()
             away_nm = str(m.away_team).strip()
             if not home_nm or not away_nm:
@@ -388,6 +418,18 @@ def main() -> None:
         action="store_true",
         help="Ignore ingestion_progress_euro.json",
     )
+    parser.add_argument(
+        "--all-calendar-years",
+        action="store_true",
+        help="Include matches from every calendar year (disables default current-year-only filter).",
+    )
+    parser.add_argument(
+        "--match-calendar-year",
+        type=int,
+        metavar="YYYY",
+        default=None,
+        help="Only keep matches in this UTC calendar year. Default: current UTC year unless --all-calendar-years.",
+    )
     parser.add_argument("--skip-domestic", action="store_true", help="Only run UEFA bucket")
     parser.add_argument("--skip-european", action="store_true", help="Skip UCL/UEL/UECL/EURO")
     parser.add_argument(
@@ -401,6 +443,13 @@ def main() -> None:
     if args.skip_domestic and args.skip_european:
         logger.error("Nothing to ingest: both --skip-domestic and --skip-european")
         return
+
+    if args.all_calendar_years:
+        match_calendar_year: int | None = None
+    elif args.match_calendar_year is not None:
+        match_calendar_year = args.match_calendar_year
+    else:
+        match_calendar_year = datetime.now(timezone.utc).year
 
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
@@ -432,7 +481,16 @@ def main() -> None:
 
     # ----- Domestic -----
     if not args.skip_domestic:
-        processed_leagues = set() if args.ignore_progress else load_progress(outdir)
+        processed_leagues = (
+            set()
+            if match_calendar_year is not None or args.ignore_progress
+            else load_progress(outdir)
+        )
+        if match_calendar_year is not None:
+            logger.info(
+                "Domestic: match calendar year=%s (UTC); ignoring ingestion_progress.json",
+                match_calendar_year,
+            )
         existing_ingested_fact, existing_summary, existing_unmatched, existing_created = load_existing_outputs(outdir)
 
         all_fact_rows: list[dict[str, Any]] = []
@@ -505,6 +563,7 @@ def main() -> None:
                         dim_country=dim_country,
                         dim_season=dim_season,
                         ss=ss,
+                        match_calendar_year=match_calendar_year,
                     )
                 else:
                     fact_rows, unmatched, created, dim_club, dim_country = ingest_league_fbref(
@@ -514,6 +573,7 @@ def main() -> None:
                         dim_country=dim_country,
                         dim_season=dim_season,
                         fb=fb,
+                        match_calendar_year=match_calendar_year,
                     )
 
                 all_fact_rows.extend(fact_rows)
@@ -548,8 +608,9 @@ def main() -> None:
                 existing_summary = pd.concat([existing_summary, new_summary], ignore_index=True)
                 existing_summary.to_csv(outdir / "ingestion_summary.csv", index=False)
 
-                processed_leagues.add(league_code)
-                save_progress(outdir, processed_leagues)
+                if match_calendar_year is None:
+                    processed_leagues.add(league_code)
+                    save_progress(outdir, processed_leagues)
 
             except Exception as e:
                 logger.error("Error processing league %s: %s", league_code, e)
@@ -595,7 +656,16 @@ def main() -> None:
         if args.european_provider == "football_data_org" and not fd_token:
             logger.error("Skipping UEFA: --european-provider football_data_org requires FOOTBALL_DATA_API_TOKEN")
         else:
-            processed_euro = set() if args.ignore_euro_progress else euro_load_progress(outdir)
+            processed_euro = (
+                set()
+                if match_calendar_year is not None or args.ignore_euro_progress
+                else euro_load_progress(outdir)
+            )
+            if match_calendar_year is not None:
+                logger.info(
+                    "UEFA: match calendar year=%s (UTC); ignoring ingestion_progress_euro.json",
+                    match_calendar_year,
+                )
             existing_euro_fact = _safe_read_csv(outdir / "fact_result_simple_ingested_euro.csv")
             existing_euro_summary = _safe_read_csv(outdir / "ingestion_summary_euro.csv")
             existing_euro_unmatched = _safe_read_csv(outdir / "unmatched_clubs_euro.csv")
@@ -630,6 +700,7 @@ def main() -> None:
                             dim_country=dim_country,
                             dim_season=dim_season,
                             token=fd_token,
+                            match_calendar_year=match_calendar_year,
                         )
                         provider = "football_data_org"
                     else:
@@ -680,6 +751,7 @@ def main() -> None:
                                 dim_country=dim_country,
                                 dim_season=dim_season,
                                 ss=ss,
+                                match_calendar_year=match_calendar_year,
                             )
                         else:
                             fact_rows, unmatched, created, dim_club, dim_country = ingest_league_fbref(
@@ -689,6 +761,7 @@ def main() -> None:
                                 dim_country=dim_country,
                                 dim_season=dim_season,
                                 fb=fb,
+                                match_calendar_year=match_calendar_year,
                             )
                         provider = be
 
@@ -724,8 +797,9 @@ def main() -> None:
                     existing_euro_summary = pd.concat([existing_euro_summary, row_ok], ignore_index=True)
                     existing_euro_summary.to_csv(outdir / "ingestion_summary_euro.csv", index=False)
 
-                    processed_euro.add(league_code)
-                    euro_save_progress(outdir, processed_euro)
+                    if match_calendar_year is None:
+                        processed_euro.add(league_code)
+                        euro_save_progress(outdir, processed_euro)
 
                 except Exception as exc:
                     logger.error("UEFA league error %s: %s", league_code, exc)

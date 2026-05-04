@@ -6,7 +6,8 @@ Write smaller on-disk copies of `output/europe` CSVs for low-RAM hosting (e.g. R
 - Columns: optional `web-minimal` sets that drop unused fields (smaller files + less pandas RAM).
 
 After running, point the API at the output folder with FOOTBALL_OUTPUT_EUROPE_DIR, or replace files in
-your deploy artifact.
+your deploy artifact. For **full weekly rating history** in Postgres / charts, import from unsliced
+``output/europe`` — slimming truncates ``europe_weekly_ratings.csv``.
 
 IMPORTANT - visibility gate: match slicing may remove whole calendar years. If you use fewer years of
 matches than `FOOTBALL_CLUB_VISIBILITY_YEARS` expects (default 2024,2025,2026), **no club may pass**
@@ -31,6 +32,17 @@ from datetime import date
 from pathlib import Path
 
 import pandas as pd
+
+
+def _weekly_ratings_src(src_dir: Path) -> Path:
+    c = src_dir / "europe_weekly_ratings.csv"
+    if c.is_file():
+        return c
+    t = src_dir / "europe_weekly_ratings.txt"
+    if t.is_file():
+        return t
+    return c
+
 
 # --- Column sets (must stay aligned with webapp/backend/data_service.py + narratives) ------------
 
@@ -244,7 +256,7 @@ def main() -> None:
     m_mode = args.match_columns
     r_mode = args.ratings_columns
 
-    _slim_weekly(src / "europe_weekly_ratings.csv", dest / "europe_weekly_ratings.csv", min_cal_year, w_mode)
+    _slim_weekly(_weekly_ratings_src(src), dest / "europe_weekly_ratings.csv", min_cal_year, w_mode)
     _slim_matches(src / "europe_match_results.csv", dest / "europe_match_results.csv", min_cal_year, m_mode)
     _slim_ratings(src / "europe_ratings.csv", dest / "europe_ratings.csv", min_cal_year, r_mode)
 
