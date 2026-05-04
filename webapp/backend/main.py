@@ -59,13 +59,13 @@ def _marble_mark_svg_path() -> Path | None:
     return None
 
 
-def _preview_png_path() -> Path | None:
-    """OG preview image from Vite ``public/preview.png`` (copied to ``dist/`` root at build time).
+def _preview_v2_png_path() -> Path | None:
+    """OG preview image from Vite ``public/preview-v2.png`` (copied to ``dist/`` root at build time).
 
-    FastAPI does not mount the entire ``dist`` root — only ``/assets`` — so ``/preview.png`` needs an explicit route
+    FastAPI does not mount the entire ``dist`` root — only ``/assets`` — so ``/preview-v2.png`` needs an explicit route
     for LinkedIn/Open Graph crawlers.
     """
-    for candidate in (DIST_DIR / "preview.png", FRONTEND_DIR / "public" / "preview.png"):
+    for candidate in (DIST_DIR / "preview-v2.png", FRONTEND_DIR / "public" / "preview-v2.png"):
         if candidate.is_file():
             return candidate
     return None
@@ -428,13 +428,13 @@ def marble_mark_svg() -> FileResponse:
     )
 
 
-@app.get("/preview.png")
-def preview_png() -> FileResponse:
-    path = _preview_png_path()
+@app.get("/preview-v2.png")
+def preview_v2_png() -> FileResponse:
+    path = _preview_v2_png_path()
     if path is None:
         raise HTTPException(
             status_code=404,
-            detail="preview.png not found — add webapp/frontend/public/preview.png and rebuild.",
+            detail="preview-v2.png not found — add webapp/frontend/public/preview-v2.png and rebuild.",
         )
     return FileResponse(
         path,
